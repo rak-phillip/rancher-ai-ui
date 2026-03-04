@@ -16,7 +16,7 @@ describe('AI Assistant Configuration', () => {
   const updatedValues = {
     llm:         'gemini',
     apiKey:      'my-api-key',
-    customAgent: 'agent-3'
+    customAgent: 'agent-2'
   };
 
   beforeEach(() => {
@@ -91,18 +91,14 @@ describe('AI Assistant Configuration', () => {
 
       aiAgentConfigs.checkExists();
 
-      // Check that both Rancher Agent and Fleet Agent tabs are present
+      // Check that Rancher Agent tab is shown
       aiAgentConfigs.tabs().getTab(initValues.rancherAgent).checkExists();
-      aiAgentConfigs.tabs().getTab(initValues.fleetAgent).checkExists();
 
       // Check that multiple agents info message is not shown when only 1 agent is enabled (Rancher Agent)
       aiAgentConfigs.self().should('not.contain', 'Because you have multiple AI agents enabled, you will be able to choose between “Adaptive Mode”');
 
-      // Check that both Rancher Agent and Fleet Agent are enabled and locked (they are built-in agents)
+      // Check that Rancher Agent is enabled and locked (it is a built-in agent)
       aiAgentConfigs.tabs().assertTabIsActive(`[data-testid="${ initValues.rancherAgent }"]`);
-      aiAgentConfigs.self().should('contain', 'This AI agent is locked');
-
-      aiAgentConfigs.tabs().clickTabWithName(initValues.fleetAgent);
       aiAgentConfigs.self().should('contain', 'This AI agent is locked');
 
       // Add a custom AI Agent

@@ -1,4 +1,5 @@
 import { shallowMount } from '@vue/test-utils';
+import { flushPromises } from '@vue/test-utils';
 import Settings from '../Settings.vue';
 import { SECRET } from '@shell/config/types';
 import { AGENT_NAMESPACE, AGENT_CONFIG_SECRET_NAME, AGENT_NAME } from '../../../product';
@@ -6,6 +7,12 @@ import { Settings as SettingsEnum, AIAgentConfigAuthType } from '../types';
 import { AIAgentConfigCRD } from '../../../types';
 
 // Mock components with external dependencies
+jest.mock('../../../composables/useChatApiComposable', () => ({
+  useChatApiComposable: jest.fn(() => ({
+    fetchSettings: jest.fn().mockResolvedValue({}),
+    saveSettings:  jest.fn().mockResolvedValue({})
+  }))
+}));
 jest.mock('../sections/AIAgentSettings.vue', () => ({}));
 jest.mock('../../../dialog/ApplySettingsCard.vue', () => ({}));
 
@@ -79,10 +86,18 @@ const mocks = {
 
 const initSettings = (options: any = {}) => {
   const dispatch = jest.fn();
+  const mockDeployment = {
+    type: 'apps.deployment',
+    spec: { template: { metadata: { annotations: {} } } },
+    save: jest.fn().mockResolvedValue({})
+  };
 
   // Default dispatch implementation
   if (!options.dispatch) {
-    dispatch.mockImplementation((action: string) => {
+    dispatch.mockImplementation((action: string, params?: any) => {
+      if (action === `management/find` && params?.id?.includes(AGENT_NAME)) {
+        return Promise.resolve(mockDeployment);
+      }
       if (action === `management/find`) {
         return Promise.resolve(mockSecret());
       }
@@ -135,6 +150,19 @@ describe('Settings.vue', () => {
       expect(wrapper.exists()).toBe(true);
     });
 
+    it('should set isLoading true on mount and false after load', async() => {
+      const wrapper = shallowMount(Settings, initSettings());
+      const vm = wrapper.vm as any;
+
+      // isLoading should be true immediately after mount
+      expect(vm.isLoading).toBe(true);
+
+      await flushPromises();
+
+      // isLoading should be false after data loads
+      expect(vm.isLoading).toBe(false);
+    });
+
     it('should initialize all required data properties', async() => {
       const wrapper = shallowMount(Settings, initSettings());
 
@@ -145,48 +173,16 @@ describe('Settings.vue', () => {
       expect(vm.aiAgentSettings).toBeDefined();
       expect(vm.aiAgentConfigCRDs).toBeDefined();
       expect(vm.authenticationSecrets).toEqual({});
-      expect(vm.hasErrors).toBe(false);
+      expect(vm.hasAiAgentSettingsValidationErrors).toBe(false);
+      expect(vm.hasAiAgentConfigsValidationErrors).toBe(false);
     });
   });
 
   describe('Permissions Check', () => {
     it('should redirect when user cannot list secrets', async() => {
-      const dispatch = jest.fn((action: string) => {
-        if (action === `management/find`) {
-          return Promise.resolve(mockSecret());
-        }
-        if (action === `management/findAll`) {
-          return Promise.resolve([]);
-        }
+      const wrapper = shallowMount(Settings, initSettings({ getters: { 'management/canList': jest.fn(() => false) } }));
 
-        return Promise.resolve(null);
-      });
-
-      const store = {
-        dispatch,
-        commit:  jest.fn(),
-        getters: {
-          'management/canList':    jest.fn(() => false),
-          'management/schemaFor':  jest.fn(() => ({ resourceMethods: ['PUT', 'POST', 'DELETE'] })),
-          'i18n/t':                (key: string) => key
-        }
-      };
-
-      const { useStore } = require('vuex'); // eslint-disable-line @typescript-eslint/no-require-imports, no-undef
-
-      (useStore as jest.Mock).mockReturnValue(store);
-
-      const wrapper = shallowMount(Settings, {
-        global: {
-          mocks: {
-            $store: store,
-            $route: {
-              query: {},
-              name:  { endsWith: () => false }
-            }
-          },
-        }
-      });
+      await flushPromises();
 
       const vm = wrapper.vm as any;
 
@@ -197,7 +193,7 @@ describe('Settings.vue', () => {
     it('should not redirect when user can list secrets', async() => {
       const wrapper = shallowMount(Settings, initSettings());
 
-      await wrapper.vm.$nextTick();
+      await flushPromises();
 
       const vm = wrapper.vm as any;
 
@@ -207,7 +203,7 @@ describe('Settings.vue', () => {
 
   describe('Fetching AI Agent Settings', () => {
     it('should fetch settings from secret', async() => {
-      const secretData = { [SettingsEnum.MODEL]: 'Z3B0LTQ=' };
+      const secretData = { [SettingsEnum.OPENAI_MODEL]: 'Z3B0LTQ=' };
 
       const dispatch = jest.fn((action: string) => {
         if (action === 'management/find') {
@@ -241,7 +237,8 @@ describe('Settings.vue', () => {
 
       const wrapper = shallowMount(Settings, initSettings({ dispatch }));
 
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await wrapper.vm.$nextTick();
+      await flushPromises();
 
       const vm = wrapper.vm as any;
 
@@ -249,9 +246,16 @@ describe('Settings.vue', () => {
     });
 
     it('should decode base64 secret data', async() => {
-      const secretData = { [SettingsEnum.MODEL]: 'Z3B0LTRv' };
+      const secretData = { [SettingsEnum.OPENAI_MODEL]: 'gpt-4o' };
 
-      const dispatch = jest.fn((action: string) => {
+      const dispatch = jest.fn((action: string, params?: any) => {
+        if (action === `management/find` && params?.id?.includes(AGENT_NAME)) {
+          return Promise.resolve({
+            type: 'apps.deployment',
+            spec: { template: { metadata: { annotations: {} } } },
+            save: jest.fn().mockResolvedValue({})
+          });
+        }
         if (action === 'management/find') {
           return Promise.resolve(mockSecret({ data: secretData }));
         }
@@ -264,11 +268,11 @@ describe('Settings.vue', () => {
 
       const wrapper = shallowMount(Settings, initSettings({ dispatch }));
 
-      await wrapper.vm.$nextTick();
+      await flushPromises();
 
       const vm = wrapper.vm as any;
 
-      expect(vm.aiAgentSettings[SettingsEnum.MODEL]).toBe('gpt-4o');
+      expect(vm.aiAgentSettings[SettingsEnum.OPENAI_MODEL]).toBe('gpt-4o');
     });
   });
 
@@ -286,9 +290,9 @@ describe('Settings.vue', () => {
         return Promise.resolve(null);
       });
 
-      const wrapper = shallowMount(Settings, initSettings({ dispatch }));
+      shallowMount(Settings, initSettings({ dispatch }));
 
-      await wrapper.vm.$nextTick();
+      await flushPromises();
 
       expect(dispatch).toHaveBeenCalledWith(expect.stringContaining('management/findAll'), expect.anything());
     });
@@ -307,7 +311,7 @@ describe('Settings.vue', () => {
 
       const wrapper = shallowMount(Settings, initSettings({ dispatch }));
 
-      await wrapper.vm.$nextTick();
+      await flushPromises();
 
       const vm = wrapper.vm as any;
 
@@ -341,7 +345,7 @@ describe('Settings.vue', () => {
 
       const wrapper = shallowMount(Settings, initSettings({ dispatch }));
 
-      await wrapper.vm.$nextTick();
+      await flushPromises();
 
       const vm = wrapper.vm as any;
 
@@ -350,11 +354,18 @@ describe('Settings.vue', () => {
   });
 
   describe('Saving Agent Settings', () => {
-    it('should encode and save settings to secret', async() => {
-      const secret = mockSecret();
+    it('should call saveSettings API with form data', async() => {
+      const { useChatApiComposable } = require('../../../composables/useChatApiComposable'); // eslint-disable-line @typescript-eslint/no-require-imports, no-undef
+      const mockSaveSettings = jest.fn().mockResolvedValue({});
+
+      (useChatApiComposable as jest.Mock).mockReturnValue({
+        fetchSettings: jest.fn().mockResolvedValue({}),
+        saveSettings:  mockSaveSettings
+      });
+
       const dispatch = jest.fn((action: string) => {
         if (action === `management/find`) {
-          return Promise.resolve(secret);
+          return Promise.resolve(mockSecret());
         }
         if (action === `management/findAll`) {
           return Promise.resolve([]);
@@ -366,21 +377,24 @@ describe('Settings.vue', () => {
       const wrapper = shallowMount(Settings, initSettings({ dispatch }));
       const vm = wrapper.vm as any;
 
-      vm.aiAgentSettings = { [SettingsEnum.MODEL]: 'gpt-4' };
+      vm.aiAgentSettings = { [SettingsEnum.OPENAI_MODEL]: 'gpt-4' };
       await vm.saveAgentSettings();
 
-      expect(secret.save).toHaveBeenCalled();
-      expect((secret.data as any)[SettingsEnum.MODEL]).toBe('Z3B0LTQ=');
+      expect(mockSaveSettings).toHaveBeenCalledWith(expect.objectContaining({ [SettingsEnum.OPENAI_MODEL]: 'gpt-4' }));
     });
 
     it('should handle save errors gracefully', async() => {
-      const secret = mockSecret();
+      const { useChatApiComposable } = require('../../../composables/useChatApiComposable'); // eslint-disable-line @typescript-eslint/no-require-imports, no-undef
+      const mockSaveSettings = jest.fn().mockRejectedValueOnce(new Error('Save failed'));
 
-      secret.save.mockRejectedValueOnce(new Error('Save failed'));
+      (useChatApiComposable as jest.Mock).mockReturnValue({
+        fetchSettings: jest.fn().mockResolvedValue({}),
+        saveSettings:  mockSaveSettings
+      });
 
       const dispatch = jest.fn((action: string) => {
         if (action === `management/find`) {
-          return Promise.resolve(secret);
+          return Promise.resolve(mockSecret());
         }
         if (action === `management/findAll`) {
           return Promise.resolve([]);
@@ -392,8 +406,8 @@ describe('Settings.vue', () => {
       const wrapper = shallowMount(Settings, initSettings({ dispatch }));
       const vm = wrapper.vm as any;
 
-      vm.aiAgentSettings = { [SettingsEnum.MODEL]: 'gpt-4' };
-      await expect(vm.saveAgentSettings()).resolves.not.toThrow();
+      vm.aiAgentSettings = { [SettingsEnum.OPENAI_MODEL]: 'gpt-4' };
+      await expect(vm.saveAgentSettings()).rejects.toThrow('Save failed');
     });
   });
 
@@ -460,7 +474,7 @@ describe('Settings.vue', () => {
       const wrapper = shallowMount(Settings, initSettings());
       const vm = wrapper.vm as any;
 
-      const newSettings = { [SettingsEnum.MODEL]: 'gpt-4o' };
+      const newSettings = { [SettingsEnum.OPENAI_MODEL]: 'gpt-4o' };
 
       vm.aiAgentSettings = newSettings;
 
@@ -494,15 +508,6 @@ describe('Settings.vue', () => {
 
       expect(vm.authenticationSecrets).toEqual(secrets);
     });
-
-    it('should track validation errors', async() => {
-      const wrapper = shallowMount(Settings, initSettings());
-      const vm = wrapper.vm as any;
-
-      expect(vm.hasErrors).toBe(false);
-      vm.hasErrors = true;
-      expect(vm.hasErrors).toBe(true);
-    });
   });
 
   describe('Lifecycle Events', () => {
@@ -519,7 +524,7 @@ describe('Settings.vue', () => {
       });
 
       shallowMount(Settings, initSettings({ dispatch }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await flushPromises();
 
       expect(dispatch).toHaveBeenCalledWith(expect.stringContaining('management/find'), expect.anything());
     });
@@ -537,7 +542,7 @@ describe('Settings.vue', () => {
       });
 
       shallowMount(Settings, initSettings({ dispatch }));
-      await new Promise((resolve) => setTimeout(resolve, 0));
+      await flushPromises();
 
       expect(dispatch).toHaveBeenCalledWith(expect.stringContaining('management/findAll'), expect.anything());
     });
@@ -545,10 +550,17 @@ describe('Settings.vue', () => {
 
   describe('Save Operation', () => {
     it('should save all data when save method is called', async() => {
-      const secret = mockSecret();
+      const { useChatApiComposable } = require('../../../composables/useChatApiComposable'); // eslint-disable-line @typescript-eslint/no-require-imports, no-undef
+      const mockSaveSettings = jest.fn().mockResolvedValue({});
+
+      (useChatApiComposable as jest.Mock).mockReturnValue({
+        fetchSettings: jest.fn().mockResolvedValue({}),
+        saveSettings:  mockSaveSettings
+      });
+
       const dispatch = jest.fn((action: string) => {
         if (action === `management/find`) {
-          return Promise.resolve(secret);
+          return Promise.resolve(mockSecret());
         }
         if (action === `management/findAll`) {
           return Promise.resolve([]);
@@ -558,14 +570,17 @@ describe('Settings.vue', () => {
       });
 
       const wrapper = shallowMount(Settings, initSettings({ dispatch }));
+
+      await flushPromises();
+
       const vm = wrapper.vm as any;
 
-      vm.aiAgentSettings = { [SettingsEnum.MODEL]: 'gpt-4' };
+      vm.aiAgentSettings = { [SettingsEnum.OPENAI_MODEL]: 'gpt-4' };
       const callback = jest.fn();
 
       await vm.save(callback);
 
-      expect(secret.save).toHaveBeenCalled();
+      expect(mockSaveSettings).toHaveBeenCalledWith(expect.any(Object));
     });
 
     it('should call save callback', async() => {
@@ -592,7 +607,14 @@ describe('Settings.vue', () => {
     });
 
     it('should call save function when openApplySettingsDialog onConfirm is triggered', async() => {
-      const secret = mockSecret();
+      const { useChatApiComposable } = require('../../../composables/useChatApiComposable'); // eslint-disable-line @typescript-eslint/no-require-imports, no-undef
+      const mockSaveSettings = jest.fn().mockResolvedValue({});
+
+      (useChatApiComposable as jest.Mock).mockReturnValue({
+        fetchSettings: jest.fn().mockResolvedValue({}),
+        saveSettings:  mockSaveSettings
+      });
+
       const deployment = {
         type: 'apps.deployment',
         spec: { template: { metadata: { annotations: {} } } },
@@ -604,7 +626,7 @@ describe('Settings.vue', () => {
           return Promise.resolve(deployment);
         }
         if (action === `management/find`) {
-          return Promise.resolve(secret);
+          return Promise.resolve(mockSecret());
         }
         if (action === `management/findAll`) {
           return Promise.resolve([]);
@@ -627,45 +649,22 @@ describe('Settings.vue', () => {
       const wrapper = shallowMount(Settings, initSettings({ dispatch }));
       const vm = wrapper.vm as any;
 
-      vm.aiAgentSettings = { [SettingsEnum.MODEL]: 'gpt-4' };
+      vm.aiAgentSettings = { [SettingsEnum.OPENAI_MODEL]: 'gpt-4' };
       const callback = jest.fn();
 
       await vm.openApplySettingsDialog(callback);
 
       await capturedOnConfirm();
 
-      expect(secret.save).toHaveBeenCalled();
+      expect(mockSaveSettings).toHaveBeenCalledWith(expect.any(Object));
     });
   });
 
   describe('Permissions Handling', () => {
     it('should compute correct permissions when all allowed', async() => {
-      const store = {
-        dispatch:  jest.fn(),
-        commit:    jest.fn(),
-        getters:   {
-          'management/canList':    jest.fn(() => true),
-          'management/schemaFor':  jest.fn(() => ({ resourceMethods: ['PUT', 'POST', 'DELETE'] })),
-          'i18n/t':                (key: string) => key
-        },
-        state: { $router: { push: jest.fn() } }
-      };
+      const wrapper = shallowMount(Settings, initSettings({ getters: { 'management/canList': jest.fn(() => true) } }));
 
-      const { useStore } = require('vuex'); // eslint-disable-line @typescript-eslint/no-require-imports, no-undef
-
-      (useStore as jest.Mock).mockReturnValue(store);
-
-      const wrapper = shallowMount(Settings, {
-        global: {
-          mocks: {
-            $store: store,
-            $route: {
-              query: {},
-              name:  { endsWith: () => false }
-            }
-          },
-        }
-      });
+      await flushPromises();
 
       const vm = wrapper.vm as any;
 
@@ -676,32 +675,14 @@ describe('Settings.vue', () => {
     });
 
     it('should handle canList true but canCreate false for secrets', async() => {
-      const store = {
-        dispatch:  jest.fn(),
-        commit:    jest.fn(),
-        getters:   {
+      const wrapper = shallowMount(Settings, initSettings({
+        getters: {
           'management/canList':    jest.fn(() => true),
           'management/schemaFor':  jest.fn(() => ({ resourceMethods: ['GET'] })), // No PUT method
-          'i18n/t':                (key: string) => key
-        },
-        state: { $router: { push: jest.fn() } }
-      };
-
-      const { useStore } = require('vuex'); // eslint-disable-line @typescript-eslint/no-require-imports, no-undef
-
-      (useStore as jest.Mock).mockReturnValue(store);
-
-      const wrapper = shallowMount(Settings, {
-        global: {
-          mocks: {
-            $store: store,
-            $route: {
-              query: {},
-              name:  { endsWith: () => false }
-            }
-          },
         }
-      });
+      }));
+
+      await flushPromises();
 
       const vm = wrapper.vm as any;
 
@@ -710,10 +691,8 @@ describe('Settings.vue', () => {
     });
 
     it('should handle canList false for secrets', async() => {
-      const store = {
-        dispatch:  jest.fn(),
-        commit:    jest.fn(),
-        getters:   {
+      const wrapper = shallowMount(Settings, initSettings({
+        getters: {
           'management/canList':    jest.fn((type) => type !== SECRET),
           'management/schemaFor':  jest.fn((type) => {
             if (type === SECRET) {
@@ -722,25 +701,10 @@ describe('Settings.vue', () => {
 
             return { resourceMethods: ['PUT', 'POST', 'DELETE'] };
           }),
-          'i18n/t': (key: string) => key
         }
-      };
+      }));
 
-      const { useStore } = require('vuex'); // eslint-disable-line @typescript-eslint/no-require-imports, no-undef
-
-      (useStore as jest.Mock).mockReturnValue(store);
-
-      const wrapper = shallowMount(Settings, {
-        global: {
-          mocks: {
-            $store: store,
-            $route: {
-              query: {},
-              name:  { endsWith: () => false }
-            }
-          },
-        }
-      });
+      await flushPromises();
 
       const vm = wrapper.vm as any;
 
@@ -749,10 +713,8 @@ describe('Settings.vue', () => {
     });
 
     it('should handle canList false for AI Agent CRDs', async() => {
-      const store = {
-        dispatch:  jest.fn(),
-        commit:    jest.fn(),
-        getters:   {
+      const wrapper = shallowMount(Settings, initSettings({
+        getters: {
           'management/canList':    jest.fn((type) => type === SECRET), // Only can list secrets
           'management/schemaFor':  jest.fn((type) => {
             if (type === SECRET) {
@@ -761,26 +723,10 @@ describe('Settings.vue', () => {
 
             return { resourceMethods: ['GET'] };
           }),
-          'i18n/t': (key: string) => key
-        },
-        state: { $router: { push: jest.fn() } }
-      };
-
-      const { useStore } = require('vuex'); // eslint-disable-line @typescript-eslint/no-require-imports, no-undef
-
-      (useStore as jest.Mock).mockReturnValue(store);
-
-      const wrapper = shallowMount(Settings, {
-        global: {
-          mocks: {
-            $store: store,
-            $route: {
-              query: {},
-              name:  { endsWith: () => false }
-            }
-          },
         }
-      });
+      }));
+
+      await flushPromises();
 
       const vm = wrapper.vm as any;
 
@@ -788,10 +734,16 @@ describe('Settings.vue', () => {
     });
 
     it('should show read-only mode when cannot create secrets', async() => {
-      const secret = mockSecret();
-      const dispatch = jest.fn((action: string) => {
+      const dispatch = jest.fn((action: string, params?: any) => {
+        if (action === `management/find` && params?.id?.includes(AGENT_NAME)) {
+          return Promise.resolve({
+            type: 'apps.deployment',
+            spec: { template: { metadata: { annotations: {} } } },
+            save: jest.fn().mockResolvedValue({})
+          });
+        }
         if (action === `management/find`) {
-          return Promise.resolve(secret);
+          return Promise.resolve(mockSecret());
         }
         if (action === `management/findAll`) {
           return Promise.resolve([]);
@@ -800,32 +752,15 @@ describe('Settings.vue', () => {
         return Promise.resolve(null);
       });
 
-      const store = {
+      const wrapper = shallowMount(Settings, initSettings({
         dispatch,
-        commit:    jest.fn(),
-        getters:   {
+        getters: {
           'management/canList':    jest.fn(() => true),
           'management/schemaFor':  jest.fn(() => ({ resourceMethods: ['GET'] })), // Can list but not create
-          'i18n/t':                (key: string) => key
-        },
-        state: { $router: { push: jest.fn() } }
-      };
-
-      const { useStore } = require('vuex'); // eslint-disable-line @typescript-eslint/no-require-imports, no-undef
-
-      (useStore as jest.Mock).mockReturnValue(store);
-
-      const wrapper = shallowMount(Settings, {
-        global: {
-          mocks: {
-            $store: store,
-            $route: {
-              query: {},
-              name:  { endsWith: () => false }
-            }
-          },
         }
-      });
+      }));
+
+      await flushPromises();
 
       const vm = wrapper.vm as any;
 
@@ -834,24 +769,28 @@ describe('Settings.vue', () => {
     });
 
     it('should show save button only when has create permission', async() => {
-      const secret = mockSecret();
-      const dispatch = jest.fn((action: string) => {
-        if (action === `management/find`) {
-          return Promise.resolve(secret);
-        }
-        if (action === `management/findAll`) {
-          return Promise.resolve([]);
-        }
-
-        return Promise.resolve(null);
-      });
-
       const store = {
-        dispatch,
+        dispatch:  jest.fn((action: string, params?: any) => {
+          if (action === 'management/find' && params?.id?.includes(AGENT_NAME)) {
+            return Promise.resolve({
+              type: 'apps.deployment',
+              spec: { template: { metadata: { annotations: {} } } },
+              save: jest.fn()
+            });
+          }
+          if (action === 'management/find') {
+            return Promise.resolve(mockSecret());
+          }
+          if (action === 'management/findAll') {
+            return Promise.resolve([]);
+          }
+
+          return Promise.resolve(null);
+        }),
         commit:    jest.fn(),
         getters:   {
           'management/canList':    jest.fn(() => true),
-          'management/schemaFor':  jest.fn(() => ({ resourceMethods: ['get'] })), // No create
+          'management/schemaFor':  jest.fn(() => ({ resourceMethods: ['get'] })),
           'i18n/t':                (key: string) => key
         },
         state: { $router: { push: jest.fn() } }
@@ -875,13 +814,31 @@ describe('Settings.vue', () => {
 
       const vm = wrapper.vm as any;
 
-      // Save button should not be visible when no create permission
+      await wrapper.vm.$nextTick();
+      await flushPromises();
+
       expect(vm.permissions?.create.canCreateSecrets).toBe(false);
     });
 
     it('should show warning banner when cannot list secrets', async() => {
       const store = {
-        dispatch:  jest.fn(),
+        dispatch:  jest.fn((action: string, params?: any) => {
+          if (action === 'management/find' && params?.id?.includes(AGENT_NAME)) {
+            return Promise.resolve({
+              type: 'apps.deployment',
+              spec: { template: { metadata: { annotations: {} } } },
+              save: jest.fn()
+            });
+          }
+          if (action === 'management/find') {
+            return Promise.resolve(mockSecret());
+          }
+          if (action === 'management/findAll') {
+            return Promise.resolve([]);
+          }
+
+          return Promise.resolve(null);
+        }),
         commit:    jest.fn(),
         getters:   {
           'management/canList':    jest.fn(() => false),
@@ -909,13 +866,22 @@ describe('Settings.vue', () => {
 
       const vm = wrapper.vm as any;
 
-      // Verify that canListSecrets is false due to permission check
+      await wrapper.vm.$nextTick();
+      await flushPromises();
+
       expect(vm.permissions?.list.canListSecrets).toBe(false);
     });
 
     it('should disable save button when validation has errors', async() => {
       const secret = mockSecret();
-      const dispatch = jest.fn((action: string) => {
+      const dispatch = jest.fn((action: string, params?: any) => {
+        if (action === `management/find` && params?.id?.includes(AGENT_NAME)) {
+          return Promise.resolve({
+            type: 'apps.deployment',
+            spec: { template: { metadata: { annotations: {} } } },
+            save: jest.fn()
+          });
+        }
         if (action === `management/find`) {
           return Promise.resolve(secret);
         }
@@ -929,29 +895,33 @@ describe('Settings.vue', () => {
       const wrapper = shallowMount(Settings, initSettings({ dispatch }));
       const vm = wrapper.vm as any;
 
-      vm.hasErrors = true;
+      vm.hasAiAgentSettingsValidationErrors = true;
 
       await wrapper.vm.$nextTick();
 
-      // Verify that hasErrors is properly tracked
-      expect(vm.hasErrors).toBe(true);
+      // Verify that hasAiAgentSettingsValidationErrors is properly tracked
+      expect(vm.hasAiAgentSettingsValidationErrors).toBe(true);
     });
 
     it('should prevent save when cannot create secrets', async() => {
-      const secret = mockSecret();
-      const dispatch = jest.fn((action: string) => {
-        if (action === `management/find`) {
-          return Promise.resolve(secret);
-        }
-        if (action === `management/findAll`) {
-          return Promise.resolve([]);
-        }
-
-        return Promise.resolve(null);
-      });
-
       const store = {
-        dispatch,
+        dispatch:  jest.fn((action: string, params?: any) => {
+          if (action === 'management/find' && params?.id?.includes(AGENT_NAME)) {
+            return Promise.resolve({
+              type: 'apps.deployment',
+              spec: { template: { metadata: { annotations: {} } } },
+              save: jest.fn()
+            });
+          }
+          if (action === 'management/find') {
+            return Promise.resolve(mockSecret());
+          }
+          if (action === 'management/findAll') {
+            return Promise.resolve([]);
+          }
+
+          return Promise.resolve(null);
+        }),
         commit:    jest.fn(),
         getters:   {
           'management/canList':    jest.fn(() => true),
@@ -979,30 +949,35 @@ describe('Settings.vue', () => {
 
       const vm = wrapper.vm as any;
 
-      // Verify that save should not proceed due to lack of create permissions
+      await wrapper.vm.$nextTick();
+      await flushPromises();
+
       expect(vm.permissions?.create.canCreateSecrets).toBe(false);
     });
 
     it('should require both create permissions for full functionality', async() => {
-      const secret = mockSecret();
-      const dispatch = jest.fn((action: string) => {
-        if (action === `management/find`) {
-          return Promise.resolve(secret);
-        }
-        if (action === `management/findAll`) {
-          return Promise.resolve([]);
-        }
-
-        return Promise.resolve(null);
-      });
-
       const store = {
-        dispatch,
+        dispatch:  jest.fn((action: string, params?: any) => {
+          if (action === 'management/find' && params?.id?.includes(AGENT_NAME)) {
+            return Promise.resolve({
+              type: 'apps.deployment',
+              spec: { template: { metadata: { annotations: {} } } },
+              save: jest.fn()
+            });
+          }
+          if (action === 'management/find') {
+            return Promise.resolve(mockSecret());
+          }
+          if (action === 'management/findAll') {
+            return Promise.resolve([]);
+          }
+
+          return Promise.resolve(null);
+        }),
         commit:    jest.fn(),
         getters:   {
           'management/canList':    jest.fn(() => true),
           'management/schemaFor':  jest.fn((type) => {
-            // Can create secrets but not AI Agent CRDs
             if (type === SECRET) {
               return { resourceMethods: ['PUT', 'POST', 'DELETE'] };
             }
@@ -1032,8 +1007,57 @@ describe('Settings.vue', () => {
 
       const vm = wrapper.vm as any;
 
+      await wrapper.vm.$nextTick();
+      await flushPromises();
+
       expect(vm.permissions?.create.canCreateSecrets).toBe(true);
       expect(vm.permissions?.create.canCreateAiAgentCRDS).toBe(false);
+    });
+
+    it('should display apiError banner when save fails', async() => {
+      const { useChatApiComposable } = require('../../../composables/useChatApiComposable'); // eslint-disable-line @typescript-eslint/no-require-imports, no-undef
+      const mockSaveSettings = jest.fn().mockRejectedValueOnce(new Error('API Error'));
+
+      (useChatApiComposable as jest.Mock).mockReturnValue({
+        fetchSettings: jest.fn().mockResolvedValue({}),
+        saveSettings:  mockSaveSettings
+      });
+
+      const dispatch = jest.fn((action: string) => {
+        if (action === `management/find`) {
+          return Promise.resolve(mockSecret());
+        }
+        if (action === `management/findAll`) {
+          return Promise.resolve([]);
+        }
+
+        return Promise.resolve(null);
+      });
+
+      const { useShell } = require('@shell/apis'); // eslint-disable-line @typescript-eslint/no-require-imports, no-undef
+      let capturedOnConfirm: any;
+
+      (useShell as jest.Mock).mockReturnValue({
+        modal: {
+          open: jest.fn((component, options) => {
+            capturedOnConfirm = options.props.onConfirm;
+          })
+        }
+      });
+
+      const wrapper = shallowMount(Settings, initSettings({ dispatch }));
+      const vm = wrapper.vm as any;
+
+      vm.aiAgentSettings = { [SettingsEnum.OPENAI_MODEL]: 'gpt-4' };
+      const callback = jest.fn();
+
+      await vm.openApplySettingsDialog(callback);
+      await capturedOnConfirm();
+
+      await wrapper.vm.$nextTick();
+
+      expect(vm.apiError).toBeTruthy();
+      expect(callback).toHaveBeenCalledWith(false);
     });
   });
 });

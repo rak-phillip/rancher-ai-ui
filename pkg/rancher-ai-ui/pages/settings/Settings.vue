@@ -1,14 +1,14 @@
 <script setup lang="ts">
 import dayjs from 'dayjs';
 import {
-  ref, onBeforeMount,
+  ref,
   onMounted,
 } from 'vue';
 import { useStore } from 'vuex';
 import { useShell } from '@shell/apis';
-import { AGENT_NAME, AGENT_NAMESPACE, AGENT_CONFIG_SECRET_NAME } from '../../product';
+import { AGENT_NAME, AGENT_NAMESPACE, AGENT_CONFIG_SECRET_NAME, AGENT_CONFIG_CONFIG_MAP_NAME } from '../../product';
 import { warn } from '../../utils/log';
-import { SECRET } from '@shell/config/types';
+import { CONFIG_MAP, SECRET, WORKLOAD_TYPES } from '@shell/config/types';
 import { SECRET_TYPES } from '@shell/config/secret';
 import { useI18n } from '@shell/composables/useI18n';
 import { base64Decode, base64Encode } from '@shell/utils/crypto';
@@ -35,14 +35,20 @@ const store = useStore();
 const { t } = useI18n(store);
 const shellApi = useShell();
 
-const { fetchSettings } = useChatApiComposable();
+// TODO: All settings will be fetched through the API in the future.
+const { fetchSettings, saveSettings } = useChatApiComposable();
 
+const isLoading = ref(true);
+const aiAgentDeployment = ref<Workload | null>(null);
 const aiAgentSettings = ref<SettingsFormData | null>(null);
 const aiAgentConfigCRDs = ref<AIAgentConfigCRD[] | null>(null);
 const authenticationSecrets = ref<Record<string, AiAgentConfigSecretPayload | null>>({});
 
 const permissions = ref<SettingsPermissions | null>(null);
-const hasErrors = ref<boolean>(false);
+
+const apiError = ref<string>('');
+const hasAiAgentSettingsValidationErrors = ref<boolean>(false);
+const hasAiAgentConfigsValidationErrors = ref<boolean>(false);
 
 const buttonProps = ref({
   successLabel: t('asyncButton.apply.action'),
@@ -50,10 +56,29 @@ const buttonProps = ref({
 });
 
 /**
+ * Fetches the rancher-ai-agent deployment to check if the AI agent is installed.
+ */
+async function fetchAiAgentDeployment() {
+  try {
+    return await store.dispatch('management/find', {
+      type:    WORKLOAD_TYPES.DEPLOYMENT,
+      id:      `${ AGENT_NAMESPACE }/${ AGENT_NAME }`
+    });
+  } catch (e) {
+    warn('Error fetching AI agent deployment:', e);
+  }
+
+  return null;
+}
+
+/**
  * Fetches the AI agent settings from the llmConfig Secret.
  */
 async function fetchAiAgentSettings() {
+  const settingsFormData = {} as SettingsFormData;
+
   let secret;
+  let configMap;
 
   try {
     secret = await store.dispatch(`management/find`, {
@@ -62,13 +87,25 @@ async function fetchAiAgentSettings() {
       opt:  { watch: true }
     });
   } catch (err) {
-    warn('Unable to fetch secret: ', { err });
+    warn(`Unable to fetch the ${ AGENT_CONFIG_SECRET_NAME } secret: `, { err });
   }
-
-  const settingsFormData: SettingsFormData = {};
 
   for (const entry in (secret?.data || {})) {
     settingsFormData[entry as keyof SettingsFormData] = base64Decode(secret.data[entry] || '');
+  }
+
+  try {
+    configMap = await store.dispatch(`management/find`, {
+      type: CONFIG_MAP,
+      id:   `${ AGENT_NAMESPACE }/${ AGENT_CONFIG_CONFIG_MAP_NAME }`,
+      opt:  { watch: true }
+    });
+  } catch (err) {
+    warn(`Unable to fetch the ${ AGENT_CONFIG_CONFIG_MAP_NAME } configMap: `, { err });
+  }
+
+  for (const entry in (configMap?.data || {})) {
+    settingsFormData[entry as keyof SettingsFormData] = configMap.data[entry] || '';
   }
 
   aiAgentSettings.value = settingsFormData;
@@ -93,56 +130,19 @@ async function fetchAiAgentConfigCRDs() {
 }
 
 /**
- * Saves the AI agent settings to the llmConfig Secret.
- *
- * If the Secret does not exist, it creates a new one.
+ * Saves the AI agent settings.
  */
 async function saveAgentSettings() {
-  const formDataToSave: { [key: string]: string } = {};
+  const formDataToSave = {} as SettingsFormData;
   const formDataObject = aiAgentSettings.value as SettingsFormData;
 
   for (const key of Object.values(Settings) as Array<keyof SettingsFormData>) {
     const value = formDataObject[key];
 
-    formDataToSave[key] = base64Encode(value || '');
+    formDataToSave[key] = value || '';
   }
 
-  let secret;
-
-  try {
-    secret = await store.dispatch(`management/find`, {
-      type: SECRET,
-      id:   `${ AGENT_NAMESPACE }/${ AGENT_CONFIG_SECRET_NAME }`,
-      opt:  { watch: true }
-    });
-  } catch (err) {
-    warn('Unable to fetch secret: ', { err });
-  } finally {
-    if (secret) {
-      // Update existing secret
-      secret.data = {
-        ...secret.data,
-        ...formDataToSave,
-      };
-    } else {
-      // Create a new secret if one does not exist
-      secret = await store.dispatch('management/create', {
-        type:     SECRET,
-        metadata: {
-          namespace: AGENT_NAMESPACE,
-          name:      AGENT_CONFIG_SECRET_NAME,
-        },
-        data: formDataToSave,
-      });
-    }
-
-    try {
-      // AI assistant namespace may not exist yet, so wrap save in try/catch
-      await secret.save();
-    } catch (err) {
-      warn('Unable to create llmConfig secret: ', { err });
-    }
-  }
+  await saveSettings(formDataToSave);
 }
 
 /**
@@ -299,8 +299,10 @@ const save = async(btnCB: (arg: boolean) => void) => { // eslint-disable-line no
       await redeployAiAgent();
     }
 
+    apiError.value = '';
     btnCB(true);
-  } catch (err) { // eslint-disable-line no-unused-vars
+  } catch (error) {
+    apiError.value = t('aiConfig.form.save.apiError', { error }, true);
     btnCB(false);
   }
 };
@@ -327,7 +329,7 @@ async function openApplySettingsDialog(btnCB: (arg: boolean) => void) { // eslin
   });
 }
 
-function getPermissions() {
+function fetchPermissions() {
   const canListSecrets = store.getters['management/canList'](SECRET);
   const canListAiAgentCRDS = store.getters['management/canList'](RANCHER_AI_SCHEMA.AI_AGENT_CONFIG);
 
@@ -337,7 +339,7 @@ function getPermissions() {
   schema = store.getters['management/schemaFor'](SECRET);
   const canCreateSecrets = !!schema?.resourceMethods.find((verb: any) => 'PUT' === verb);
 
-  return {
+  permissions.value = {
     list:   {
       canListSecrets,
       canListAiAgentCRDS
@@ -349,24 +351,28 @@ function getPermissions() {
   };
 }
 
-onBeforeMount(() => {
-  permissions.value = getPermissions();
-});
+onMounted(async() => {
+  aiAgentDeployment.value = await fetchAiAgentDeployment();
 
-onMounted(() => {
-  const listPermissions = permissions.value?.list;
+  isLoading.value = false;
 
-  if (listPermissions?.canListSecrets) {
+  if (aiAgentDeployment.value === null) {
+    return;
+  }
+
+  fetchPermissions();
+
+  if (permissions.value?.list?.canListSecrets) {
     fetchAiAgentSettings();
   }
-  if (listPermissions?.canListAiAgentCRDS) {
+  if (permissions.value?.list?.canListAiAgentCRDS) {
     fetchAiAgentConfigCRDs();
   }
 });
 </script>
 
 <template>
-  <loading v-if="(permissions?.list.canListSecrets && !aiAgentSettings) || (permissions?.list.canListAiAgentCRDS && !aiAgentConfigCRDs)" />
+  <loading v-if="isLoading || (permissions?.list.canListSecrets && !aiAgentSettings) || (permissions?.list.canListAiAgentCRDS && !aiAgentConfigCRDs)" />
   <div
     v-else
     class="ai-configs-container"
@@ -376,57 +382,74 @@ onMounted(() => {
       {{ t('aiConfig.form.header') }}
     </h1>
 
-    <settings-row
-      :title="t('aiConfig.form.section.provider.header')"
-      :description="t('aiConfig.form.section.provider.description')"
-      data-testid="rancher-ai-ui-settings-ai-agent-settings"
-    >
-      <AIAgentSettings
-        v-if="aiAgentSettings"
-        :value="aiAgentSettings"
-        :read-only="!permissions?.create.canCreateSecrets"
-        @update:value="aiAgentSettings = $event"
-      />
-      <Banner
-        v-else-if="!permissions?.list.canListSecrets"
-        class="m-0"
-        color="warning"
-        :label="t('aiConfig.form.section.provider.noPermission.list')"
-      />
-    </settings-row>
+    <Banner
+      v-if="aiAgentDeployment === null"
+      class="m-0"
+      color="warning"
+      :label="t('aiConfig.form.warning.noDeployment', { namespace: AGENT_NAMESPACE, name: AGENT_NAME })"
+    />
 
-    <settings-row
-      :title="t('aiConfig.form.section.aiAgent.header')"
-      :description="t('aiConfig.form.section.aiAgent.description')"
-      data-testid="rancher-ai-ui-settings-ai-agent-configs"
-    >
-      <AIAgentConfigs
-        v-if="aiAgentConfigCRDs"
-        :value="aiAgentConfigCRDs"
-        :read-only="!permissions?.create.canCreateSecrets || !permissions?.create.canCreateAiAgentCRDS"
-        @update:value="aiAgentConfigCRDs = $event"
-        @update:authentication-secrets="authenticationSecrets = $event"
-        @update:validation-error="hasErrors = $event"
-      />
-      <Banner
-        v-else-if="!permissions?.list.canListAiAgentCRDS"
-        class="m-0"
-        color="warning"
-        :label="t('aiConfig.form.section.aiAgent.noPermission.list')"
-      />
-    </settings-row>
+    <template v-else>
+      <settings-row
+        :title="t('aiConfig.form.section.provider.header')"
+        :description="t('aiConfig.form.section.provider.description')"
+        data-testid="rancher-ai-ui-settings-ai-agent-settings"
+      >
+        <AIAgentSettings
+          v-if="aiAgentSettings"
+          :value="aiAgentSettings"
+          :read-only="!permissions?.create.canCreateSecrets"
+          @update:value="aiAgentSettings = $event; apiError = ''"
+          @update:validation-error="hasAiAgentSettingsValidationErrors = $event"
+        />
+        <Banner
+          v-else-if="!permissions?.list.canListSecrets"
+          class="m-0"
+          color="warning"
+          :label="t('aiConfig.form.section.provider.noPermission.list')"
+        />
+      </settings-row>
 
-    <div class="form-footer">
-      <async-button
-        v-if="permissions?.create.canCreateAiAgentCRDS || permissions?.create.canCreateSecrets"
-        action-label="Apply"
-        data-testid="rancher-ai-ui-settings-save-button"
-        :success-label="buttonProps.successLabel"
-        :success-color="buttonProps.successColor"
-        :disabled="hasErrors"
-        @click="openApplySettingsDialog"
+      <settings-row
+        :title="t('aiConfig.form.section.aiAgent.header')"
+        :description="t('aiConfig.form.section.aiAgent.description')"
+        data-testid="rancher-ai-ui-settings-ai-agent-configs"
+      >
+        <AIAgentConfigs
+          v-if="aiAgentConfigCRDs"
+          :value="aiAgentConfigCRDs"
+          :read-only="!permissions?.create.canCreateSecrets || !permissions?.create.canCreateAiAgentCRDS"
+          @update:value="aiAgentConfigCRDs = $event"
+          @update:authentication-secrets="authenticationSecrets = $event"
+          @update:validation-error="hasAiAgentConfigsValidationErrors = $event"
+        />
+        <Banner
+          v-else-if="!permissions?.list.canListAiAgentCRDS"
+          class="m-0"
+          color="warning"
+          :label="t('aiConfig.form.section.aiAgent.noPermission.list')"
+        />
+      </settings-row>
+
+      <Banner
+        v-if="!!apiError"
+        class="m-0"
+        color="error"
+        :label="apiError"
       />
-    </div>
+
+      <div class="form-footer">
+        <async-button
+          v-if="permissions?.create.canCreateAiAgentCRDS || permissions?.create.canCreateSecrets"
+          action-label="Apply"
+          data-testid="rancher-ai-ui-settings-save-button"
+          :success-label="buttonProps.successLabel"
+          :success-color="buttonProps.successColor"
+          :disabled="hasAiAgentSettingsValidationErrors || hasAiAgentConfigsValidationErrors"
+          @click="openApplySettingsDialog"
+        />
+      </div>
+    </template>
   </div>
 </template>
 
