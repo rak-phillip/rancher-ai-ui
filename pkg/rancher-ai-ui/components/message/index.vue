@@ -296,6 +296,7 @@ onBeforeUnmount(() => {
     flex-direction: column;
     align-items: flex-end;
     margin: 0;
+    margin-left: 40px;
   }
 
   .chat-msg-text {
@@ -305,7 +306,6 @@ onBeforeUnmount(() => {
 
 .chat-msg-bubble {
   position: relative;
-  max-width: 455px;
   background: var(--body-bg);
   color: var(--body-text);
   border: 1px solid var(--border);

@@ -104,6 +104,7 @@ describe('Multi Agent Messages', () => {
 
     let confirmationRequestMessage = chat.getMessage(5);
 
+    confirmationRequestMessage.scrollIntoView();
     confirmationRequestMessage.isCompleted();
     confirmationRequestMessage.containsText('Are you sure you want to proceed with this action?');
     confirmationRequestMessage.confirmButton().click();
@@ -258,6 +259,7 @@ describe('Multi Agent Messages', () => {
 
     let confirmationRequestMessage = chat.getMessage(5);
 
+    confirmationRequestMessage.scrollIntoView();
     confirmationRequestMessage.isCompleted();
     confirmationRequestMessage.containsText('Are you sure you want to proceed with this action?');
     confirmationRequestMessage.confirmButton().click();

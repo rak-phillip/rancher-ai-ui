@@ -126,7 +126,21 @@ ai:
   confirmation:
     message:
       question: Are you sure you want to proceed with this action?
-      description: 'I will <b>{op}</b> the value <code>{value}</code> in the path <code>{path}</code> to the <code>{name}</code> {kind} in the <code>{namespace}</code> namespace of the <code>{cluster}</code> cluster.'
+      operation:
+        create:
+          description: |-
+            {
+              namespace, select,
+                null { I will create the new {kind} <code>{name}</code> in the <code>{cluster}</code> cluster with this payload:<br><pre><code>{value}</code></pre> }
+                other { I will create the new {kind} <code>{name}</code> in the <code>{namespace}</code> namespace of the <code>{cluster}</code> cluster with this payload:<br><pre><code>{value}</code></pre> }
+            }
+        update:
+          description: |-
+            {
+              namespace, select,
+                null { I will <b>{op}</b> the value <code>{value}</code> in the path <code>{path}</code> to the <code>{name}</code> {kind} in the <code>{cluster}</code> cluster. }
+                other { I will <b>{op}</b> the value <code>{value}</code> in the path <code>{path}</code> to the <code>{name}</code> {kind} in the <code>{namespace}</code> namespace of the <code>{cluster}</code> cluster. }
+            }
     confirm: Confirm
     cancel: Cancel
     confirmed: Confirmed
@@ -279,12 +293,8 @@ aiConfig:
             placeholder: https://endpoint.mcp
           humanValidationTools:
             addLabel: Add Validation Tool
-            fields:
-              name:
-                label: Name
-              type:
-                label: Type
             emptyLabel: No human validation tools have been defined for this agent
+            placeholder: e.g. createResource
           systemPrompt:
             label: System Prompt
             placeholder: Markdown Instructions

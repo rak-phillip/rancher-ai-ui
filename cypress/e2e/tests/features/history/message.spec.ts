@@ -91,6 +91,7 @@ describe('History Messages', () => {
 
     let confirmationRequestMessage = chat.getMessage(5);
 
+    confirmationRequestMessage.scrollIntoView();
     confirmationRequestMessage.isCompleted();
     confirmationRequestMessage.containsText('Are you sure you want to proceed with this action?');
     confirmationRequestMessage.confirmButton().click();
@@ -127,6 +128,7 @@ describe('History Messages', () => {
 
     confirmationRequestMessage = chat.getMessage(8);
 
+    confirmationRequestMessage.scrollIntoView();
     confirmationRequestMessage.isCompleted();
     confirmationRequestMessage.containsText('Are you sure you want to proceed with this action?');
     confirmationRequestMessage.cancelButton().click();
@@ -197,6 +199,7 @@ describe('History Messages', () => {
 
     const historyConfirmedMessage = chat.getMessage(4);
 
+    historyConfirmedMessage.scrollIntoView();
     historyConfirmedMessage.confirmButton().should('not.exist');
     historyConfirmedMessage.cancelButton().should('not.exist');
     historyConfirmedMessage.isConfirmed();
@@ -204,6 +207,7 @@ describe('History Messages', () => {
 
     const historyResultMessage = chat.getMessage(5);
 
+    historyResultMessage.scrollIntoView();
     historyResultMessage.containsText('Pod created successfully.');
 
     // Verify cancel action
@@ -214,6 +218,7 @@ describe('History Messages', () => {
 
     const historyCanceledMessage = chat.getMessage(7);
 
+    historyCanceledMessage.scrollIntoView();
     historyCanceledMessage.confirmButton().should('not.exist');
     historyCanceledMessage.cancelButton().should('not.exist');
     historyCanceledMessage.isCanceled();

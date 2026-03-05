@@ -60,7 +60,7 @@ const options = computed<AgentOption[]>(() => {
       name:        agent.name,
       displayName: agent.displayName || agent.name,
       error:       agent.status !== 'active',
-      tooltip:     agent.status !== 'active' ? t('ai.agents.items.unavailable', {}, true) : t('ai.agents.items.default.description'),
+      tooltip:     agent.status !== 'active' ? t('ai.agents.items.unavailable', {}, true) : (agent.description || ''),
     }))
   ];
 });
