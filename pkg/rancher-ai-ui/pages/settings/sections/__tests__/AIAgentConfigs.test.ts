@@ -861,8 +861,10 @@ describe('AIAgentConfigs.vue', () => {
       const agent = mockAgent({
         spec: {
           ...mockAgent().spec,
-          mcpURL:      'http://valid',
-          displayName: 'Valid'
+          mcpURL:       'http://valid',
+          displayName:  'Valid',
+          description:  'Valid Description',
+          systemPrompt: 'Valid System Prompt'
         }
       });
 
@@ -900,8 +902,93 @@ describe('AIAgentConfigs.vue', () => {
       const agent = mockAgent({
         spec: {
           ...mockAgent().spec,
-          mcpURL:      'http://localhost:8000',
-          displayName: 'Valid Agent'
+          mcpURL:       'http://localhost:8000',
+          displayName:  'Valid Agent',
+          description:  'Valid Description',
+          systemPrompt: 'Valid System Prompt'
+        }
+      });
+
+      const wrapper = shallowMount(AIAgentConfigs, {
+        ...requiredSetup(),
+        props: { value: [agent] }
+      });
+
+      const vm = wrapper.vm as any;
+
+      expect(vm.validationErrors['test-agent']).toBeUndefined();
+    });
+
+    it('should compute validation errors for empty description', () => {
+      const agent = mockAgent({
+        spec: {
+          ...mockAgent().spec,
+          description: ''
+        }
+      });
+
+      const wrapper = shallowMount(AIAgentConfigs, {
+        ...requiredSetup(),
+        props: { value: [agent] }
+      });
+
+      const vm = wrapper.vm as any;
+
+      expect(vm.validationErrors['test-agent']).toBe(true);
+    });
+
+    it('should compute validation errors for empty systemPrompt', () => {
+      const agent = mockAgent({
+        spec: {
+          ...mockAgent().spec,
+          systemPrompt: ''
+        }
+      });
+
+      const wrapper = shallowMount(AIAgentConfigs, {
+        ...requiredSetup(),
+        props: { value: [agent] }
+      });
+
+      const vm = wrapper.vm as any;
+
+      expect(vm.validationErrors['test-agent']).toBe(true);
+    });
+
+    it('should show systemPrompt validation icon only when field is touched and empty', async() => {
+      const agent = mockAgent({
+        spec: {
+          ...mockAgent().spec,
+          systemPrompt: ''
+        }
+      });
+
+      const wrapper = shallowMount(AIAgentConfigs, {
+        ...requiredSetup(),
+        props: { value: [agent] }
+      });
+
+      const vm = wrapper.vm as any;
+
+      // Icon should not be visible initially (not touched)
+      expect(vm.systemPromptValidationStatus.touched).toBe(false);
+
+      vm.systemPromptValidationStatus.touched = true;
+      await wrapper.vm.$nextTick();
+
+      // Icon should be visible since the field is touched and empty
+      expect(vm.systemPromptValidationStatus.touched).toBe(true);
+      expect(vm.selectedAgent.spec.systemPrompt).toBe('');
+    });
+
+    it('should not have validation errors when all required fields are filled', () => {
+      const agent = mockAgent({
+        spec: {
+          ...mockAgent().spec,
+          displayName:  'Valid Agent',
+          description:  'Valid Description',
+          mcpURL:       'http://localhost:8000',
+          systemPrompt: 'Valid system prompt'
         }
       });
 

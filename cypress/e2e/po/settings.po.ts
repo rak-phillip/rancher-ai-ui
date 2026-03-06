@@ -67,4 +67,12 @@ export class AiAgentConfigs extends ComponentPo {
   mcpUrlInput() {
     return LabeledInputPo.byLabel(this.self(), 'Endpoint');
   }
+
+  descriptionInput() {
+    return cy.get('textarea[data-testid="rancher-ai-ui-settings-ai-agent-configs-description"]').first();
+  }
+
+  guidelinesInput() {
+    return cy.get('textarea[data-testid="rancher-ai-ui-settings-ai-agent-configs-system-prompt"]').first();
+  }
 }

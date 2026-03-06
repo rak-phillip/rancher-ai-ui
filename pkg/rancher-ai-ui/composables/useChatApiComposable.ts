@@ -6,18 +6,16 @@ import {
 import { buildMessageFromHistoryMessage } from '../utils/format';
 import { Settings } from '../pages/settings/types';
 
-interface OllamaLLMOptions {
-  url: string;
-}
-
-interface BedrockLLMOptions {
+interface LLMOptions {
+  url?: string;
   region?: string;
   bearerToken?: string;
-}
+};
 
-type LLMConfig =
-  | { name: LLMProvider.Local; options: OllamaLLMOptions }
-  | { name: LLMProvider.Bedrock; options: BedrockLLMOptions };
+interface LLMConfig {
+  name: LLMProvider;
+  options: LLMOptions;
+}
 
 /**
  * Composable for managing the chat API interactions.
@@ -35,18 +33,18 @@ export function useChatApiComposable(agents?: ComputedRef<Agent[]>) {
   const apiPath = `/api/v1/namespaces/${ AGENT_NAMESPACE }/services/http:${ AGENT_NAME }:80/proxy/${ AGENT_REST_API_PATH }`;
   let llmModelsAbortController: AbortController | null = null;
 
-  async function fetchLLMModels(llm: LLMConfig): Promise<string[]> {
+  async function fetchLLMModels(llmConfig: LLMConfig): Promise<string[]> {
     // Abort and refresh the AbortController for fetching LLM models
     if (llmModelsAbortController) {
       llmModelsAbortController.abort();
     }
     llmModelsAbortController = new AbortController();
 
-    const { name, options } = llm;
-
     const queryParams = new URLSearchParams();
 
-    switch (name) {
+    const { name: llm, options } = llmConfig;
+
+    switch (llm) {
     case LLMProvider.Local:
       if (options.url) {
         queryParams.append('url', options.url);
@@ -64,7 +62,7 @@ export function useChatApiComposable(agents?: ComputedRef<Agent[]>) {
       break;
     }
 
-    const apiUrl = `${ apiPath }/llm/${ name }/models?${ queryParams.toString() }`;
+    const apiUrl = `${ apiPath }/llm/${ llm }/models?${ queryParams.toString() }`;
 
     const data = await fetch(apiUrl, { signal: llmModelsAbortController.signal });
 

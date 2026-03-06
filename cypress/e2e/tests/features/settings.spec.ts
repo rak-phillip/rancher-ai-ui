@@ -115,8 +115,11 @@ describe('AI Assistant Configuration', () => {
       // Check that Save button is disabled since the new agent has validation errors -> missing MCP URL
       settingsPage.settings().saveButton().should('be.disabled');
 
-      // Fill the MCP URL for the custom agent and check that the Save button is enabled
+      // Fill the required fields for the custom agent and check that the Save button is enabled
       aiAgentConfigs.mcpUrlInput().set('http://my-mcp-url:8080');
+      aiAgentConfigs.descriptionInput().type('Custom agent description');
+      aiAgentConfigs.guidelinesInput().type('Custom agent guidelines');
+
       settingsPage.settings().saveButton().should('be.enabled');
 
       settingsPage.settings().saveButton().click();

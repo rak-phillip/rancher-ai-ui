@@ -243,7 +243,7 @@ function updateModelValidation(key: ChatBotEnum, payload: ModelValidationPayload
  * @param chatbot The name of the chatbot provider
  */
 async function fetchModels(chatbot: ChatBotEnum, options: Record<string, any> = {}) {
-  const chatbotOptions: Record<string, any> = {};
+  const chatbotOptions: Record<string, string> = {};
 
   switch (chatbot) {
   case ChatBotEnum.Local:
@@ -263,6 +263,7 @@ async function fetchModels(chatbot: ChatBotEnum, options: Record<string, any> = 
       name:    chatbot,
       options: chatbotOptions
     });
+
     updateModelValidation(chatbot, { status: ValidationStatus.SUCCESS });
   } catch (error) {
     if ((error as Error).name === 'AbortError') {
