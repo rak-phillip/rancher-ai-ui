@@ -156,7 +156,7 @@ ai:
     confirming: 'Confirming'
     finalizing: 'Finalizing results'
     connecting: 'Connecting'
-    reconnecting: 'Connecting'
+    reconnecting: 'Reconnecting'
     connected: 'Connected'
     disconnected: 'Disconnected'
     connectionClosed: 'Connection closed'
