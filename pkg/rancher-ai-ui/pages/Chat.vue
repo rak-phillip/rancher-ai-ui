@@ -325,6 +325,7 @@ function unmount() {
         @select="selectContext"
       />
       <Console
+        :active-chat-id="chatMetadata.chatId"
         :llm-config="llmConfig"
         :agents="chatAgents"
         :agent-name="agentName"

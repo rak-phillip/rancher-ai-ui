@@ -22,6 +22,10 @@ const store = useStore();
 const { t } = useI18n(store);
 
 const props = defineProps({
+  activeChatId: {
+    type:    String,
+    default: '',
+  },
   llmConfig: {
     type:     Object as PropType<LLMConfig | null>,
     default:  null,
@@ -105,18 +109,28 @@ function autoResizePrompt() {
   }
 }
 
-onMounted(() => {
-  nextTick(() => {
-    promptTextarea.value?.focus();
-    autoResizePrompt();
-  });
-});
-
 watch(() => text.value, () => {
   nextTick(() => {
     autoResizePrompt();
   });
 }, {});
+
+watch(
+  () => [props.disabled, props.activeChatId],
+  ([newDisabled, newChatId], [oldDisabled, oldChatId]) => {
+    if (!newDisabled && (oldDisabled || oldChatId !== newChatId)) {
+      nextTick(() => {
+        promptTextarea.value?.focus();
+      });
+    }
+  }
+);
+
+onMounted(() => {
+  nextTick(() => {
+    autoResizePrompt();
+  });
+});
 </script>
 
 <template>
