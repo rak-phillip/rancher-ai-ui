@@ -2,7 +2,7 @@ import ComponentPo from '@rancher/cypress/e2e/po/components/component.po';
 
 export default class ApplySettingsPromptPo extends ComponentPo {
   constructor() {
-    super(cy.get('[data-testid="modal-manager-component"].prompt-apply-settings'));
+    super(cy.get('[data-testid="card"].prompt-apply-settings'));
   }
 
   confirm() {

@@ -5,7 +5,6 @@ import {
   onMounted,
 } from 'vue';
 import { useStore } from 'vuex';
-import { useShell } from '@shell/apis';
 import {
   AGENT_NAME, AGENT_NAMESPACE, AGENT_CONFIG_SECRET_NAME, AGENT_CONFIG_CONFIG_MAP_NAME, PERMISSIONS_DOCS_URL
 } from '../../product';
@@ -15,14 +14,15 @@ import { SECRET_TYPES } from '@shell/config/secret';
 import { useI18n } from '@shell/composables/useI18n';
 import { base64Decode, base64Encode } from '@shell/utils/crypto';
 import Banner from '@components/Banner/Banner.vue';
-import AsyncButton from '@shell/components/AsyncButton.vue';
+import AsyncButton, { AsyncButtonCallback } from '@shell/components/AsyncButton.vue';
 import Loading from '@shell/components/Loading.vue';
 import RichTranslation from '@shell/components/RichTranslation.vue';
+import AppModal from '@shell/components/AppModal.vue';
 import {
   SettingsFormData, Settings, Workload, AiAgentConfigSecretPayload, AIAgentConfigAuthType,
   SettingsPermissions,
 } from './types';
-import { AIAgentConfigCRD, RANCHER_AI_SCHEMA } from '../../types';
+import { AgentSettings, AIAgentConfigCRD, RANCHER_AI_SCHEMA } from '../../types';
 import { AI_AGENT_LABELS } from '../../labels-annotations';
 import SettingsRow from './SettingsRow.vue';
 import AIAgentConfigs from './sections/AIAgentConfigs.vue';
@@ -36,13 +36,18 @@ import { useChatApiComposable } from '../../composables/useChatApiComposable';
 
 const store = useStore();
 const { t } = useI18n(store);
-const shellApi = useShell();
+// const shellApi = useShell();
 
 // TODO: All settings will be fetched through the API in the future.
 const { fetchSettings, saveSettings } = useChatApiComposable();
 
 const isLoading = ref(true);
+const isSaving = ref(false);
+
+const applySettingsCb = ref<AsyncButtonCallback | null>(null);
+
 const aiAgentDeployment = ref<Workload | null>(null);
+const chatSettings = ref<AgentSettings | null>(null);
 const aiAgentSettings = ref<SettingsFormData | null>(null);
 const aiAgentConfigCRDs = ref<AIAgentConfigCRD[] | null>(null);
 const authenticationSecrets = ref<Record<string, AiAgentConfigSecretPayload | null>>({});
@@ -71,6 +76,17 @@ async function fetchAiAgentDeployment() {
     } catch (e) {
       warn('Error fetching AI agent deployment:', e);
     }
+  }
+}
+
+/**
+ * Fetches the chat settings from the API.
+ */
+async function fetchChatSettings() {
+  try {
+    chatSettings.value = await fetchSettings();
+  } catch (e) {
+    warn('Error fetching chat settings: ', e);
   }
 }
 
@@ -316,26 +332,26 @@ const save = async(btnCB: (arg: boolean) => void) => { // eslint-disable-line no
   }
 };
 
-async function openApplySettingsDialog(btnCB: (arg: boolean) => void) { // eslint-disable-line no-unused-vars
-  const chatSettings = await fetchSettings();
+function applySettings() {
+  buttonProps.value.successLabel = t('asyncButton.done.success');
+  buttonProps.value.successColor = 'bg-success';
 
-  shellApi.modal.open(ApplySettings, {
-    props: {
-      storageType: chatSettings?.storageType || '',
-      onConfirm:   () => {
-        buttonProps.value.successLabel = t('asyncButton.done.success');
-        buttonProps.value.successColor = 'bg-success';
-        save(btnCB);
-      },
-      onCancel: () => {
-        buttonProps.value.successLabel = t('asyncButton.apply.action');
-        buttonProps.value.successColor = 'bg-primary';
-        btnCB(true);
-      },
-    },
-    closeOnClickOutside: false,
-    width:               '400px',
-  });
+  if (!!applySettingsCb.value) {
+    save(applySettingsCb.value);
+
+    isSaving.value = false;
+  }
+}
+
+function discardSettings() {
+  buttonProps.value.successLabel = t('asyncButton.apply.action');
+  buttonProps.value.successColor = 'bg-primary';
+
+  if (!!applySettingsCb.value) {
+    applySettingsCb.value(true);
+  }
+
+  isSaving.value = false;
 }
 
 function fetchPermissions() {
@@ -370,6 +386,8 @@ onMounted(async() => {
   await fetchAiAgentDeployment();
 
   if (!!aiAgentDeployment.value) {
+    await fetchChatSettings();
+
     await fetchAiAgentSettings();
 
     await fetchAiAgentConfigCRDs();
@@ -473,11 +491,23 @@ onMounted(async() => {
           :success-label="buttonProps.successLabel"
           :success-color="buttonProps.successColor"
           :disabled="hasAiAgentSettingsValidationErrors || hasAiAgentConfigsValidationErrors"
-          @click="openApplySettingsDialog"
+          @click="applySettingsCb = $event; isSaving = true"
         />
       </div>
     </template>
   </div>
+  <app-modal
+    v-if="isSaving"
+    :width="400"
+    :click-to-close="false"
+    height="auto"
+  >
+    <ApplySettings
+      :storage-type="chatSettings?.storageType || ''"
+      @confirm="applySettings"
+      @cancel="discardSettings"
+    />
+  </app-modal>
 </template>
 
 <style lang="scss" scoped>
@@ -485,6 +515,7 @@ onMounted(async() => {
   display: flex;
   flex-direction: column;
   gap: 24px;
+  padding: 24px;
 }
 
 .form-footer {
