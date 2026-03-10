@@ -16,7 +16,11 @@ const props = defineProps({
   suggestions: {
     type:    Array as PropType<MessageActionSuggestion[]>,
     default: () => ([] as MessageActionSuggestion[]),
-  }
+  },
+  disabled: {
+    type:    Boolean,
+    default: false,
+  },
 });
 
 const emit = defineEmits(['select']);
@@ -37,6 +41,7 @@ const emit = defineEmits(['select']);
           tertiary
           small
           :data-testid="`rancher-ai-ui-chat-message-suggestion-${index}`"
+          :disabled="props.disabled"
           @click="() => emit('select', suggestion)"
         >
           <span class="rc-button-label">

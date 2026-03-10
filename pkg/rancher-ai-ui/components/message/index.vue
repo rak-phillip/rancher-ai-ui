@@ -189,11 +189,12 @@ onBeforeUnmount(() => {
           />
         </div>
         <div
-          v-if="props.message.suggestionActions?.length && !pendingConfirmation"
+          v-if="props.message.suggestionActions?.length && !props.message.confirmation"
           class="chat-msg-section-footer"
         >
           <Suggestions
             :suggestions="props.message.suggestionActions"
+            :disabled="disabled || pendingConfirmation"
             @select="(suggestion: string) => emit('send:message', suggestion)"
           />
         </div>
