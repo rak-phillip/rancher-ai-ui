@@ -11,6 +11,7 @@ import {
 import { formatMessageContent } from '../../utils/format';
 import MessageComponent from '../message/index.vue';
 import Welcome from '../message/template/Welcome.vue';
+import NoPermission from '../message/template/NoPermissions.vue';
 import SystemSuggestion from '../message/template/SystemSuggestion.vue';
 import ScrollButton from '../ScrollButton.vue';
 import Processing from '../Processing.vue';
@@ -76,7 +77,8 @@ const systemErrorMessages = computed<FormattedMessage[]>(() => {
     timestamp:               new Date(),
     completed:               true,
     source:                  MessageInternalSource.Error,
-    actions:                 error.action ? [error.action] : []
+    actions:                 error.action ? [error.action] : [],
+    sourceLinks:             error.sourceLinks || []
   }));
 });
 
@@ -84,6 +86,8 @@ function getMessageTemplate(component: MessageTemplateComponent) {
   switch (component) {
   case MessageTemplateComponent.Welcome:
     return Welcome;
+  case MessageTemplateComponent.NoPermission:
+    return NoPermission;
   case MessageTemplateComponent.SystemSuggestion:
     return SystemSuggestion;
   default:
@@ -192,7 +196,7 @@ onBeforeUnmount(() => {
         :is="getMessageTemplate(message.templateContent?.component)"
         v-if="!!message.templateContent"
         :class="{
-          'chat-message-template-welcome': formattedMessages.length > 1,
+          'chat-message-template': formattedMessages.length > 1,
         }"
         :data-testid="`rancher-ai-ui-chat-message-box-${ message.id }`"
         :data-teststatus="`rancher-ai-ui-chat-message-status-${ message.id }-${ message.completed ? 'completed' : 'inprogress' }`"
@@ -247,7 +251,7 @@ onBeforeUnmount(() => {
   gap: 16px;
 }
 
-.chat-message-template-welcome {
+.chat-message-template {
   margin-bottom: 16px;
 }
 

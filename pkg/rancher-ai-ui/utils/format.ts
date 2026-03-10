@@ -12,6 +12,7 @@ import {
   Agent,
   MessageLabelKey,
   ChatError,
+  SourceLinkItem,
 } from '../types';
 import { validateActionResource } from './validator';
 
@@ -223,7 +224,7 @@ export function formatFileMessages(principal: any, messages: Message[]): string 
   }).join('\n');
 }
 
-export function formatSourceLinks(links: string[], value: string): string[] {
+export function formatSourceLinks(links: SourceLinkItem[], value: string): SourceLinkItem[] {
   const cleanedLink = value.replaceAll(Tag.DocLinkStart, '').replaceAll(Tag.DocLinkEnd, '').trim();
 
   return [
@@ -329,7 +330,7 @@ export function buildMessageFromHistoryMessage(msg: HistoryChatMessage, agents: 
   /**
    * Parsing source links
    */
-  let sourceLinks: string[] = [];
+  let sourceLinks: SourceLinkItem[] = [];
 
   while (msg.message?.includes(Tag.DocLinkStart) && msg.message?.includes(Tag.DocLinkEnd)) {
     const linkPart = msg.message.substring(
