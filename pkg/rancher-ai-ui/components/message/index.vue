@@ -189,7 +189,7 @@ onBeforeUnmount(() => {
           />
         </div>
         <div
-          v-if="props.message.suggestionActions?.length"
+          v-if="props.message.suggestionActions?.length && !pendingConfirmation"
           class="chat-msg-section-footer"
         >
           <Suggestions
