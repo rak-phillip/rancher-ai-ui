@@ -1,8 +1,8 @@
 <script setup lang="ts">
 import { PropType, reactive, ref, nextTick } from 'vue';
 import { useStore } from 'vuex';
-import { useShell } from '@shell/apis';
 import { useI18n } from '@shell/composables/useI18n';
+import AppModal from '@shell/components/AppModal.vue';
 import { HistoryChat } from '../../types';
 import RcButton from '@components/RcButton/RcButton.vue';
 import HistoryHeader from '../history/HistoryHeader.vue';
@@ -11,7 +11,6 @@ import DeleteChat from '../../dialog/DeleteChatCard.vue';
 
 const store = useStore();
 const { t } = useI18n(store);
-const shellApi = useShell();
 
 const props = defineProps({
   chats: {
@@ -38,6 +37,7 @@ const emit = defineEmits([
 
 const chatBtnHover = reactive<Record<string, boolean>>({});
 const editingChat = ref<Partial<HistoryChat> | null>(null);
+const deletingChat = ref<HistoryChat | null>(null);
 
 function chatNameTooltip(chat: HistoryChat): string {
   let createdAt = '';
@@ -70,14 +70,12 @@ function openChat(id: string) {
   emit('open:chat', id);
 }
 
-function openDeleteChatModal(chat: HistoryChat) {
-  shellApi.modal.open(DeleteChat, {
-    props: {
-      name:      chat.name,
-      onConfirm: () => emit('delete:chat', chat.id),
-    },
-    width: '400px',
-  });
+function deleteChat() {
+  if (deletingChat.value) {
+    emit('delete:chat', deletingChat.value.id);
+
+    deletingChat.value = null;
+  }
 }
 
 function updateChatName(chat: Partial<HistoryChat>) {
@@ -189,7 +187,7 @@ function dismissEdit() {
                   v-if="chatBtnHover[chat.id]"
                   @click.stop
                   @update:chat="updateChatName(chat)"
-                  @delete:chat="openDeleteChatModal(chat)"
+                  @delete:chat="deletingChat = chat"
                 />
               </RcButton>
             </div>
@@ -198,6 +196,17 @@ function dismissEdit() {
       </div>
     </div>
   </transition>
+  <app-modal
+    v-if="!!deletingChat"
+    :width="400"
+    height="auto"
+  >
+    <DeleteChat
+      :name="deletingChat.name"
+      @confirm="deleteChat"
+      @close="deletingChat = null"
+    />
+  </app-modal>
 </template>
 
 <style lang="scss" scoped>
