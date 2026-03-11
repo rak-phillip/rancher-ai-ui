@@ -45,15 +45,38 @@ const emit = defineEmits(['update:value', 'update:validation-error']);
 const { fetchLLMModels } = useChatApiComposable();
 
 const BEDROCK_REGION_OPTIONS = [
-  'us-east-1',
-  'us-west-2',
-  'eu-west-1',
-  'eu-central-1',
-  'eu-north-1',
-  'ap-southeast-1',
-  'ap-northeast-1',
-  'ap-south-1',
-  'ca-central-1'
+  // North America
+  'us-east-1',      // US East (N. Virginia)
+  'us-east-2',      // US East (Ohio)
+  'us-west-2',      // US West (Oregon)
+  'ca-central-1',   // Canada (Central)
+  'us-gov-west-1',  // AWS GovCloud (US-West)
+
+  // Europe
+  'eu-central-1',   // Europe (Frankfurt)
+  'eu-west-1',      // Europe (Ireland)
+  'eu-west-2',      // Europe (London)
+  'eu-west-3',      // Europe (Paris)
+  'eu-north-1',     // Europe (Stockholm)
+  'eu-south-1',     // Europe (Milan)
+  'eu-central-2',   // Europe (Zurich)
+
+  // Asia Pacific
+  'ap-southeast-1', // Asia Pacific (Singapore)
+  'ap-southeast-2', // Asia Pacific (Sydney)
+  'ap-southeast-3', // Asia Pacific (Jakarta)
+  'ap-northeast-1', // Asia Pacific (Tokyo)
+  'ap-northeast-2', // Asia Pacific (Seoul)
+  'ap-northeast-3', // Asia Pacific (Osaka)
+  'ap-south-1',     // Asia Pacific (Mumbai)
+  'ap-east-1',      // Asia Pacific (Hong Kong)
+
+  // South America
+  'sa-east-1',      // South America (São Paulo)
+
+  // Middle East & Africa
+  'me-central-1',   // Middle East (UAE)
+  'af-south-1'      // Africa (Cape Town)
 ];
 
 const activeChatbotOptions = [
@@ -128,11 +151,18 @@ const errorField = ref([
 }), {} as Record<ChatBotEnum, Record<string, boolean>>));
 
 const isModelsAvailable = computed(() => {
+  const activeChatbot = formData.value[Settings.ACTIVE_CHATBOT];
+
+  if (activeChatbot === ChatBotEnum.Bedrock) {
+    return true;
+  }
+
   if (isModelsLoading.value) {
     return false;
   }
+
   // If active chatbot is empty, it means the settings are untouched, so we don't want to disable the model field
-  if (!models.value[formData.value[Settings.ACTIVE_CHATBOT] as ChatBotEnum]?.length && !formData.value[getModelKey(formData.value[Settings.ACTIVE_CHATBOT])]) {
+  if (!models.value[activeChatbot as ChatBotEnum]?.length && !formData.value[getModelKey(activeChatbot)]) {
     return false;
   }
 
@@ -199,6 +229,9 @@ function validateSettings(updatedForm: SettingsFormData) {
     if (!updatedForm[Settings.AWS_BEARER_TOKEN_BEDROCK] || !updatedForm[Settings.AWS_REGION]) {
       hasError = true;
     }
+    if (modelValidation.value[ChatBotEnum.Bedrock].status === ValidationStatus.ERROR) {
+      hasError = true;
+    }
     break;
   }
 
@@ -262,8 +295,11 @@ async function fetchModels(chatbot: ChatBotEnum, options: Record<string, any> = 
       });
       /**
        * If fetching models fails, we want to clear the model field value,
-       * but only if those fields are being edited (touched)
+       * but only if those fields are being edited (touched), and not for Bedrock...
        */
+      if (chatbot === ChatBotEnum.Bedrock) {
+        return;
+      }
       if (Object.keys(errorField.value[chatbot] || {}).some((v) => v)) {
         formData.value[getModelKey(chatbot)] = '';
       }
@@ -453,7 +489,7 @@ onMounted(() => {
         :value="formData[chatbotConfigKey]"
         :label="t(`aiConfig.form.${ chatbotConfigKey }.label`)"
         :disabled="readOnly"
-        :mode="readOnly ? _VIEW : _EDIT"
+        :mode="_EDIT"
         :required="true"
         data-testid="rancher-ai-ui-settings-llm-api-key-input"
         @update:value="(val: string) => updateValue(chatbotConfigKey, val)"
@@ -491,7 +527,7 @@ onMounted(() => {
         <Password
           :value="formData[Settings.AWS_BEARER_TOKEN_BEDROCK]"
           :label="t(`aiConfig.form.${ Settings.AWS_BEARER_TOKEN_BEDROCK}.label`)"
-          :mode="readOnly || !formData[Settings.AWS_REGION] ? _VIEW : _EDIT"
+          :mode="_EDIT"
           :required="true"
           @update:value="(val: string) => updateBedrockTokenValue(val)"
         />
@@ -509,12 +545,15 @@ onMounted(() => {
     </template>
 
     <div class="form-field">
-      <LabeledSelect
+      <component
+        :is="formData[Settings.ACTIVE_CHATBOT] === ChatBotEnum.Bedrock && modelValidation[ChatBotEnum.Bedrock]?.status === ValidationStatus.ERROR ? LabeledInput : LabeledSelect"
         :value="formData[getModelKey(formData[Settings.ACTIVE_CHATBOT])]"
         :label="t(`aiConfig.form.${ getModelKey(formData[Settings.ACTIVE_CHATBOT]) }.label`)"
         :options="models[formData[Settings.ACTIVE_CHATBOT] as ChatBotEnum] || []"
         :loading="isModelsLoading"
         :disabled="readOnly || !isModelsAvailable"
+        :taggable="true"
+        :searchable="true"
         :required="true"
         @update:value="(val: string) => updateValue(getModelKey(formData[Settings.ACTIVE_CHATBOT]), val)"
       />
@@ -646,7 +685,7 @@ onMounted(() => {
           <password
             :value="formData[Settings.LANGFUSE_SECRET_KEY]"
             :label="t(`aiConfig.form.${ Settings.LANGFUSE_SECRET_KEY}.label`)"
-            :mode="readOnly ? _VIEW : _EDIT"
+            :mode="_EDIT"
             @update:value="(val: string) => updateValue(Settings.LANGFUSE_SECRET_KEY, val)"
           />
           <label class="text-label">

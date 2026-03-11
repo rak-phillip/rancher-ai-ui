@@ -21,6 +21,9 @@ jest.mock('../../../../components/toggle/toggle-group.vue', () => ({
   }
 }));
 
+// Mock useChatApiComposable - used in validateSettings to avoid actual API calls during tests
+jest.mock('../../../../composables/useChatApiComposable', () => ({ useChatApiComposable: () => ({ fetchLLMModels: jest.fn().mockResolvedValue(['default-model']) }) }));
+
 // Mock Vuex
 jest.mock('vuex', () => {
   const actual = jest.requireActual('vuex');
