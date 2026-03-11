@@ -6,7 +6,7 @@ import {
 } from 'vue';
 import { PRODUCT_NAME } from '../product';
 import {
-  Agent, AgentState, AIServiceState, ChatMetadata, ConnectionPhase, HistoryChat, Message, MessagePhase, StorageType
+  Agent, AgentState, AIServiceState, ConnectionPhase, HistoryChat, Message, MessagePhase, StorageType
 } from '../types';
 import { useConnectionComposable } from '../composables/useConnectionComposable';
 import { useChatMessageComposable } from '../composables/useChatMessageComposable';
@@ -56,8 +56,12 @@ const {
   loadMessages,
   selectContext,
   clearMessageBox,
+  chatMetadata,
   isChatInitialized,
+  resetChatMetadata,
   phase: messagePhase,
+  error: chatError,
+  resetErrors: resetChatErrors
 } = useChatMessageComposable(
   CHAT_ID,
   hasPermissions,
@@ -97,10 +101,6 @@ const {
 const showHistory = ref(false);
 const chatHistory = ref<HistoryChat[]>([]);
 
-const chatMetadata = computed<ChatMetadata>(() => {
-  return store.getters['rancher-ai-ui/chat/metadata'] || {};
-});
-
 const chatAgents = computed<Agent[]>(() => {
   return agents.value.map((agent) => {
     const chatAgent = chatMetadata.value.agents?.find((a) => a.name === agent?.name);
@@ -112,10 +112,12 @@ const chatAgents = computed<Agent[]>(() => {
   });
 });
 
-// AI service's errors are priority over websocket
+// AI service's errors are priority over websocket and chat errors
 const systemErrors = computed(() => {
   if (aiServiceError.value) {
     return [aiServiceError.value];
+  } else if (chatError.value) {
+    return [chatError.value];
   } else {
     return [
       wsError.value
@@ -167,7 +169,7 @@ async function ensureReconnectionAndLoadChat(chatId: string | null) {
   const initChat = async() => {
     loadMessages(chatId ? await fetchMessages(chatId) : []);
     nextTick(() => {
-      store.commit('rancher-ai-ui/chat/setMetadata', { chatId });
+      resetChatMetadata({ chatId });
       connect(chatId);
     });
   };
@@ -222,6 +224,8 @@ watch(() => aiAgentDeploymentState.value, (newState, oldState) => {
     storageType = StorageType.InMemory
   } = chatMetadata.value;
 
+  resetChatErrors();
+
   /**
    * AI agent became active on mount or after a service state update - connect to the existing chat if there is one in memory, otherwise start a new one
    */
@@ -236,11 +240,7 @@ watch(() => aiAgentDeploymentState.value, (newState, oldState) => {
     showHistory.value = false;
 
     if (storageType === StorageType.InMemory) {
-      store.commit('rancher-ai-ui/chat/setMetadata', {
-        chatId:      '',
-        agents:      null,
-        storageType: null
-      });
+      resetChatMetadata({ chatId: '' });
     }
 
     disconnect();

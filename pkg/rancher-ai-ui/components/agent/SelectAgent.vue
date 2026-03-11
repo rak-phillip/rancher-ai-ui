@@ -3,7 +3,7 @@ import { debounce } from 'lodash';
 import { computed, ref, type PropType } from 'vue';
 import { useStore } from 'vuex';
 import { useI18n } from '@shell/composables/useI18n';
-import { Agent } from '../../types';
+import { Agent, AgentState } from '../../types';
 import {
   RcDropdown,
   RcDropdownTrigger,
@@ -42,7 +42,7 @@ const props = defineProps({
 
 const emit = defineEmits(['select']);
 
-const activeAgentNames = computed(() => props.agents.filter((agent) => agent.status === 'active').map((agent) => agent.name));
+const activeAgentNames = computed(() => props.agents.filter((agent) => agent.status === AgentState.Active).map((agent) => agent.name));
 
 const options = computed<AgentOption[]>(() => {
   const defaultOptions = activeAgentNames.value.length > 1 ? [
@@ -59,8 +59,8 @@ const options = computed<AgentOption[]>(() => {
     ...props.agents.map((agent) => ({
       name:        agent.name,
       displayName: agent.displayName || agent.name,
-      error:       agent.status !== 'active',
-      tooltip:     agent.status !== 'active' ? t('ai.agents.items.unavailable', {}, true) : (agent.description || ''),
+      error:       agent.status !== AgentState.Active,
+      tooltip:     agent.status !== AgentState.Active ? t('ai.agents.items.unavailable', {}, true) : (agent.description || ''),
     }))
   ];
 });

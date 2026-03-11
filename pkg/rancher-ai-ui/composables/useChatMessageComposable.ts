@@ -3,12 +3,22 @@ import { useStore } from 'vuex';
 import { useI18n } from '@shell/composables/useI18n';
 import { NORMAN } from '@shell/config/types';
 import { PRODUCT_NAME } from '../product';
-import { useContextComposable } from './useContextComposable';
 import {
   ActionType,
   Agent,
   AgentSelectionMode,
-  ChatError, ConfirmationResponse, ConfirmationStatus, Message, MessageInternalSource, MessageLabelKey, MessagePhase, MessageTag, MessageTemplateComponent, Role, Tag
+  ChatError,
+  ChatMetadata,
+  ConfirmationResponse,
+  ConfirmationStatus,
+  Message,
+  MessageInternalSource,
+  MessageLabelKey,
+  MessagePhase,
+  MessageTag,
+  MessageTemplateComponent,
+  Role,
+  Tag
 } from '../types';
 import {
   formatWSInputMessage, formatMessageRelatedResourcesActions, formatConfirmationActions, formatSuggestionActions, formatFileMessages,
@@ -18,6 +28,7 @@ import {
   formatChatErrorMessage
 } from '../utils/format';
 import { downloadFile } from '@shell/utils/download';
+import { useContextComposable } from './useContextComposable';
 
 const EXPAND_THINKING = false;
 const DISMISS_RECOMMENDED_AGENT_KEY = 'dismissed-agent-recommendation';
@@ -49,7 +60,8 @@ export function useChatMessageComposable(
   const currentMsg = ref<Message>({} as Message);
   const error = computed(() => store.getters['rancher-ai-ui/chat/error'](chatId));
 
-  const isChatInitialized = computed(() => !!store.getters['rancher-ai-ui/chat/metadata']?.chatId);
+  const chatMetadata = computed<ChatMetadata>(() => store.getters['rancher-ai-ui/chat/metadata'] || {});
+  const isChatInitialized = computed(() => !!chatMetadata.value.chatId);
 
   const phase = computed(() => store.getters['rancher-ai-ui/chat/phase'](chatId) || MessagePhase.Initializing);
 
@@ -276,7 +288,17 @@ export function useChatMessageComposable(
         processChatErrors(data);
         processChatMetadata(data);
       } catch (err) {
-        processInitErrorData(err as Error);
+        setErrors({
+          message: (err as Error)?.message || t('ai.error.chat.generic'),
+          action:  {
+            label:    t('ai.settings.goToSettings'),
+            type:     ActionType.Button,
+            resource: {
+              cluster:        'local',
+              detailLocation: { name: `c-cluster-settings-${ PRODUCT_NAME }` }
+            }
+          },
+        });
       }
     } else {
       try {
@@ -480,24 +502,6 @@ export function useChatMessageComposable(
     });
   }
 
-  function processInitErrorData(error: Error) {
-    addMessage({
-      role:                    Role.System,
-      messageContent:          (error as ChatError).message,
-      actions:                 [{
-        label:    t('ai.settings.goToAgents'),
-        type:     ActionType.Button,
-        resource: {
-          cluster:        'local',
-          detailLocation: { name: `c-cluster-settings-${ PRODUCT_NAME }` }
-        }
-      }],
-      timestamp: new Date(),
-      completed: true,
-      source:    MessageInternalSource.Error,
-    });
-  }
-
   function downloadMessages() {
     downloadFile(
       `Rancher-liz-chat-${ chatId }_${ new Date().toISOString().slice(0, 10) }.txt`,
@@ -514,6 +518,21 @@ export function useChatMessageComposable(
 
   function resetMessages() {
     store.commit('rancher-ai-ui/chat/resetMessages', chatId);
+  }
+
+  function resetChatMetadata(args: { chatId: string | null } = { chatId: null }) {
+    store.commit('rancher-ai-ui/chat/setMetadata', {
+      chatId:      args.chatId,
+      agents:      null,
+      storageType: null
+    });
+  }
+
+  function setErrors(error: ChatError | null = null) {
+    store.commit('rancher-ai-ui/chat/setError', {
+      chatId,
+      error,
+    });
   }
 
   function clearMessageBox() {
@@ -542,8 +561,11 @@ export function useChatMessageComposable(
     loadMessages,
     resetMessages,
     clearMessageBox,
+    chatMetadata,
     isChatInitialized,
+    resetChatMetadata,
     phase,
-    error
+    error,
+    resetErrors: () => setErrors(null),
   };
 }

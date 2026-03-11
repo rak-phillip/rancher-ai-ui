@@ -163,6 +163,8 @@ ai:
     disconnected: 'Disconnected'
     connectionClosed: 'Connection closed'
   error:
+    chat:
+      generic: 'An error occurred initializing the chat'
     message:
       processing: 'Error processing messages: '
     websocket:

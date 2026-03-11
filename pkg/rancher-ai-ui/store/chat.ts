@@ -1,6 +1,7 @@
 import { PRODUCT_NAME } from '../product';
 import { CoreStoreSpecifics, CoreStoreConfig } from '@shell/core/types';
 import {
+  ChatError,
   ChatMetadata,
   ConfirmationStatus, Message, MessageInternalSource, MessagePhase, Role
 } from '../types';
@@ -18,6 +19,7 @@ interface Chat {
   agentName?: string;
   messages: Record<string, Message>;
   phase?: MessagePhase;
+  error?: ChatError | null;
 }
 
 type MessageBox = Record<string, Message>;
@@ -72,6 +74,9 @@ const getters = {
 
     return MessagePhase.Idle;
   },
+  error: (state: State) => (chatId: string) => {
+    return state.chats[chatId]?.error || null;
+  },
   messageBox: (state: State) => (chatId: string) => {
     return state.messageBox[chatId];
   },
@@ -97,6 +102,10 @@ const mutations = {
   },
 
   setMetadata(state: State, metadata: ChatMetadata) {
+    if (state.metadata?.chatId && state.chats[state.metadata.chatId]) {
+      state.chats[state.metadata.chatId].error = null;
+    }
+
     state.metadata = {
       ...state.metadata,
       ...metadata
@@ -189,6 +198,16 @@ const mutations = {
     }
 
     state.chats[chatId].phase = phase;
+  },
+
+  setError(state: State, args: { chatId: string; error: ChatError | null }) {
+    const { chatId, error } = args;
+
+    if (!chatId || !state.chats[chatId]) {
+      return;
+    }
+
+    state.chats[chatId].error = error;
   },
 
   addToMessageBox(state: State, args: { chatId: string; message: Message }) {

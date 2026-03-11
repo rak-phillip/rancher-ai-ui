@@ -271,6 +271,40 @@ describe('Chat', () => {
       resultMessageAfterReconnection.isCompleted();
     });
 
+    it('it should support reconnections from no available agents condition (chat errors handling)', () => {
+      HomePagePo.goTo();
+
+      // Delete the mcp to make all built-in agents unavailable
+      cy.deleteRancherResource('v1', 'apps.deployment', `cattle-ai-agent-system/rancher-mcp-server`, false);
+
+      chat.open();
+
+      chat.isNotReady();
+      chat.getSystemErrorMessage(1).containsText('Failed to load MCP tools for all enabled agents.');
+      chat.getSystemErrorMessage(1).containsText('Please check the AI Agents configuration and ensure the MCP server is accessible with the provided connection details.');
+
+      // Re-install the chart, including the mcp, to make the agents available again and allow reconnection
+      cy.installRancherAIService({ waitForAIServiceReady: false });
+
+      chat.phase('Connecting').should('be.visible');
+
+      chat.isReady(20000);
+      chat.phase('Connecting').should('not.exist');
+
+      // Check that the chat is working after reconnection
+      chat.sendMessage('User request after reconnection');
+
+      const userMessageAfterReconnection = chat.getMessage(2);
+
+      userMessageAfterReconnection.containsText('User request after reconnection');
+
+      const resultMessageAfterReconnection = chat.getMessage(3);
+
+      resultMessageAfterReconnection.containsText('Mock service');
+
+      resultMessageAfterReconnection.isCompleted();
+    });
+
     after(() => {
       cy.installRancherAIService();
     });
