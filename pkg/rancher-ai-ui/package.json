@@ -7,8 +7,7 @@
     "annotations": {
       "catalog.cattle.io/display-name": "AI Assistant",
       "catalog.cattle.io/rancher-version": ">= 2.13.0",
-      "catalog.cattle.io/ui-extensions-version": ">= 3.0.0 < 4.0.0",
-      "catalog.cattle.io/prime-only": "true"
+      "catalog.cattle.io/ui-extensions-version": ">= 3.0.0 < 4.0.0"
     }
   },
   "icon": "https://raw.githubusercontent.com/rancher-sandbox/rancher-ai-ui/main/pkg/rancher-ai-ui/assets/extension-icon.svg",
