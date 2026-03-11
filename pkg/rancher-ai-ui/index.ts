@@ -1,6 +1,7 @@
 import { defineAsyncComponent } from 'vue';
 import { importTypes } from '@rancher/auto-import';
 import { ActionLocation, IPlugin } from '@shell/core/types';
+import { warn } from './utils/log';
 import extensionRouting from './routing/extension-routing';
 import connectionStore from './store/connection';
 import chatStore from './store/chat';
@@ -10,9 +11,31 @@ import Chat from './handlers/chat';
 import Hooks from './handlers/hooks/index';
 import BadgeSlidingOverlay from './handlers/hooks/overlay/badge-sliding';
 import BannerButtonOverlay from  './handlers/hooks/overlay/banner-button';
+import { NotificationLevel } from '@shell/types/notifications';
 
 // Init the package
 export default function(plugin: IPlugin, { store }: any): void {
+  const isDev = (plugin as any).builtin; // Running in development mode
+  const isPrime = plugin.environment.isPrime;
+
+  if (!isDev && !isPrime) {
+    warn('Rancher Prime subscription required');
+
+    plugin.addNavHooks({
+      onLogin: async(store: any) => {
+        store.dispatch('notifications/add', {
+          id:      'rancher-ai-requires-prime',
+          level:   NotificationLevel.Error,
+          // Note: Hard-coded strings due to issue where onLogin called before i18n loaded from extension
+          title:   'Rancher AI Assistant requires Rancher Prime',
+          message: 'The Rancher AI Assistant requires a Rancher Prime subscription. Please upgrade to Prime or uninstall this extension.'
+        });
+      }
+    });
+
+    return;
+  }
+
   // Auto-import model, detail, edit from the folders
   importTypes(plugin);
 
