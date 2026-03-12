@@ -5,7 +5,36 @@ export const rancherAgentConfig = {
     name:      'rancher',
     namespace: 'cattle-ai-agent-system',
   },
-  spec: { mcpURL: 'rancher-mcp-server.cattle-ai-agent-system.svc' }
+  spec: {
+    enabled: true,
+    mcpURL:  'rancher-mcp-server.cattle-ai-agent-system.svc',
+  }
+};
+
+export const fleetAgentConfig = {
+  apiVersion: 'ai.cattle.io/v1alpha1',
+  kind:       'AIAgentConfig',
+  metadata:   {
+    name:      'fleet',
+    namespace: 'cattle-ai-agent-system',
+  },
+  spec: {
+    enabled: true,
+    mcpURL:  'rancher-mcp-server.cattle-ai-agent-system.svc',
+  }
+};
+
+export const provisioningAgentConfig = {
+  apiVersion: 'ai.cattle.io/v1alpha1',
+  kind:       'AIAgentConfig',
+  metadata:   {
+    name:      'provisioning',
+    namespace: 'cattle-ai-agent-system',
+  },
+  spec: {
+    enabled: true,
+    mcpURL:  'rancher-mcp-server.cattle-ai-agent-system.svc',
+  }
 };
 
 export const harvesterAgentConfig = {

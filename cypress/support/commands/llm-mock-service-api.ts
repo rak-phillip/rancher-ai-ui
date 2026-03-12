@@ -6,9 +6,11 @@ import { LlmResponseArgs } from '@/cypress/globals';
  * @param args - The arguments for the LLM response.
  *
  * arg.agent (Optional)
- *   The agent name that will be selected by the ai agent. If not provided, the default agent will be used.
- *   Note: This parameter is useful when multiple agents are configured in the Rancher AI UI.
- *         When agents are not configured or there is only one agent, this parameter MUST be omitted.
+ *   This agent will be selected by the AI service in Adaptive Mode.
+ *    - If not provided, the default agent will be used (rancher).
+ *    - If provided, the specified agent will be used when Adaptive Mode is enabled.
+ *   Note: This parameter must be omitted when multiple agents are not configured or there is only 1 agent enabled and active.
+ *         This parameter must be Null when the Agent is selected by Manual Mode.
  *
  * arg.text (Optional)
  *   The text content to be received. Can be a string or an array of strings (chunks).
@@ -112,7 +114,8 @@ Cypress.Commands.add('enqueueLLMResponse', (args: LlmResponseArgs) => {
     }
   }
 
-  const agent = args.agent;
+  // We are in a multi-agent environment, select the default agent if not specified.
+  const agent = args.agent === undefined ? 'rancher' : args.agent;
   const text = chunks.length > 0 ? { chunks } : undefined;
   const tool = args.tool;
 

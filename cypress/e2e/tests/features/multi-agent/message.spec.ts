@@ -45,7 +45,6 @@ describe('Multi Agent Messages', () => {
     selectAgent.self().contains('Adaptive Agent Selection');
 
     cy.enqueueLLMResponse({
-      agent:    defaultAgent.name,
       text:  [
         '<think>',
         'Thin',
@@ -79,7 +78,6 @@ describe('Multi Agent Messages', () => {
     responseMessage.selectedAgentLabel(defaultAgent.name).contains(`${ defaultAgent.displayName } (Adaptive Mode)`);
 
     cy.enqueueLLMResponse({
-      agent:    defaultAgent.name,
       text:      'Pod created successfully.',
       tool:  {
         name: 'createKubernetesResource',
@@ -148,7 +146,7 @@ describe('Multi Agent Messages', () => {
     selectAgent.self().contains('Adaptive Agent Selection');
 
     cy.enqueueLLMResponse({
-      agent:    customAgent.name,
+      agent: customAgent.name,
       text:  [
         '<think>',
         'Thin',
@@ -220,6 +218,7 @@ describe('Multi Agent Messages', () => {
           namespace: 'cattle-ai-agent-system'
         }
       },
+      agent: null
     });
 
     chat.sendMessage('Request message.');
@@ -253,6 +252,7 @@ describe('Multi Agent Messages', () => {
           namespace: 'default'
         }
       },
+      agent: null
     });
 
     chat.sendMessage('Create a pod');

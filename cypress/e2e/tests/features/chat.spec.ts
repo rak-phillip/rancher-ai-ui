@@ -9,6 +9,7 @@ import { SettingsPagePo as GlobalSettings } from '@rancher/cypress/e2e/po/pages/
 import { SettingsPagePo } from '@/cypress/e2e/po/settings.po';
 import ChatPo from '@/cypress/e2e/po/chat.po';
 import ApplySettingsPromptPo from '@/cypress/e2e/po/dialog/apply-settings.po';
+import { rancherAgentConfig, fleetAgentConfig, provisioningAgentConfig } from '@/cypress/e2e/blueprints/aiAgentConfigs';
 
 describe('Chat', () => {
   const chat = new ChatPo();
@@ -272,16 +273,38 @@ describe('Chat', () => {
     });
 
     it('it should support reconnections from no available agents condition (chat errors handling)', () => {
-      HomePagePo.goTo();
+      // Disable all agents
+      cy.updateAgentConfig({
+        ...rancherAgentConfig,
+        spec: { enabled: false }
+      });
 
-      // Delete the mcp to make all built-in agents unavailable
-      cy.deleteRancherResource('v1', 'apps.deployment', `cattle-ai-agent-system/rancher-mcp-server`, false);
+      cy.updateAgentConfig({
+        ...fleetAgentConfig,
+        spec: { enabled: false }
+      });
+
+      cy.updateAgentConfig({
+        ...provisioningAgentConfig,
+        spec: { enabled: false }
+      });
+
+      const globalSettings = new GlobalSettings('_');
+      const sideNav = new ProductNavPo();
+
+      globalSettings.goTo();
+      globalSettings.waitForPage();
+
+      sideNav.navToSideMenuEntryByLabel('AI Assistant');
+
+      cy.contains('None of your AI agents are currently enabled').should('exist');
+
+      HomePagePo.goTo();
 
       chat.open();
 
       chat.isNotReady();
-      chat.getSystemErrorMessage(1).containsText('Failed to load MCP tools for all enabled agents.');
-      chat.getSystemErrorMessage(1).containsText('Please check the AI Agents configuration and ensure the MCP server is accessible with the provided connection details.');
+      chat.getSystemErrorMessage(1).containsText('No agent configurations available.');
 
       // Re-install the chart, including the mcp, to make the agents available again and allow reconnection
       cy.installRancherAIService({ waitForAIServiceReady: false });

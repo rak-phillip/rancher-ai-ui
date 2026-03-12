@@ -202,7 +202,7 @@ describe('History Messages', () => {
     historyConfirmedMessage.scrollIntoView();
     historyConfirmedMessage.confirmButton().should('not.exist');
     historyConfirmedMessage.cancelButton().should('not.exist');
-    historyConfirmedMessage.isConfirmed();
+    historyConfirmedMessage.isConfirmed().scrollIntoView();
     historyConfirmedMessage.containsText('Confirmed');
 
     const historyResultMessage = chat.getMessage(5);
@@ -221,7 +221,7 @@ describe('History Messages', () => {
     historyCanceledMessage.scrollIntoView();
     historyCanceledMessage.confirmButton().should('not.exist');
     historyCanceledMessage.cancelButton().should('not.exist');
-    historyCanceledMessage.isCanceled();
+    historyCanceledMessage.isCanceled().scrollIntoView();
     historyCanceledMessage.containsText('Canceled');
   });
 

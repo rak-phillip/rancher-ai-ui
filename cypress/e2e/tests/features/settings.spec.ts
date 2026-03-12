@@ -16,7 +16,7 @@ describe('AI Assistant Configuration', () => {
   const updatedValues = {
     llm:         'gemini',
     apiKey:      'my-api-key',
-    customAgent: 'agent-2'
+    customAgent: 'agent-4'
   };
 
   beforeEach(() => {
@@ -94,8 +94,8 @@ describe('AI Assistant Configuration', () => {
       // Check that Rancher Agent tab is shown
       aiAgentConfigs.tabs().getTab(initValues.rancherAgent).checkExists();
 
-      // Check that multiple agents info message is not shown when only 1 agent is enabled (Rancher Agent)
-      aiAgentConfigs.self().should('not.contain', 'Because you have multiple AI agents enabled, you will be able to choose between “Adaptive Mode”');
+      // Check that multiple agents info message is shown
+      aiAgentConfigs.self().should('contain', 'Because you have multiple AI agents enabled, you will be able to choose between “Adaptive Mode”');
 
       // Check that Rancher Agent is enabled and locked (it is a built-in agent)
       aiAgentConfigs.tabs().assertTabIsActive(`[data-testid="${ initValues.rancherAgent }"]`);
@@ -108,9 +108,6 @@ describe('AI Assistant Configuration', () => {
 
       aiAgentConfigs.tabs().assertTabIsActive(`[data-testid="${ updatedValues.customAgent }"]`);
       aiAgentConfigs.self().should('not.contain', 'This AI agent is locked');
-
-      // We now have 2 enabled agents (Rancher Agent + custom agent), so the multiple agents info message should be shown
-      aiAgentConfigs.self().should('contain', 'Because you have multiple AI agents enabled, you will be able to choose between “Adaptive Mode”');
 
       // Check that Save button is disabled since the new agent has validation errors -> missing MCP URL
       settingsPage.settings().saveButton().should('be.disabled');
@@ -143,7 +140,6 @@ describe('AI Assistant Configuration', () => {
       aiAgentConfigs.tabs().removeTab();
 
       aiAgentConfigs.tabs().getTab(updatedValues.customAgent).checkNotExists();
-      aiAgentConfigs.self().should('not.contain', 'Because you have multiple AI agents enabled, you will be able to choose between “Adaptive Mode”');
 
       settingsPage.settings().saveButton().click();
 
