@@ -26,57 +26,55 @@ const confirmationText = computed(() => {
   const msg = t('ai.confirmation.message.question');
 
   try {
-    if (!props.messageContent) {
-      let out = '';
+    let out = '';
 
-      props.value.actions?.forEach((action) => {
-        const actionType = action?.type || ConfirmationActionType.Create;
+    props.value.actions?.forEach((action) => {
+      const actionType = action?.type || ConfirmationActionType.Create;
 
-        const {
-          kind, name, namespace, cluster
-        } = action?.resource || {};
+      const {
+        kind, name, namespace, cluster
+      } = action?.resource || {};
 
-        if (kind && name && cluster) {
-          switch (actionType) {
-          case ConfirmationActionType.Create:
-            out += `${ t(`ai.confirmation.message.operation.create.description`, {
-              name,
-              kind,
-              namespace: namespace?.trim() || null,
-              cluster,
-              value:     JSON.stringify(action.payload)
-            }, true)  }<br>`;
-            break;
-          case ConfirmationActionType.Update:
-          case ConfirmationActionType.Patch:
-            const description = action?.payload?.reduce((acc: string, curr) => {
-              const { op, value, path } = curr || {};
+      if (kind && name && cluster) {
+        switch (actionType) {
+        case ConfirmationActionType.Create:
+          out += `${ t(`ai.confirmation.message.operation.create.description`, {
+            name,
+            kind,
+            namespace: namespace?.trim() || null,
+            cluster,
+            value:     JSON.stringify(action.payload)
+          }, true)  }<br>`;
+          break;
+        case ConfirmationActionType.Update:
+        case ConfirmationActionType.Patch:
+          const description = action?.payload?.reduce((acc: string, curr) => {
+            const { op, value, path } = curr || {};
 
-              if (op && value && path) {
-                return `${ acc + t(`ai.confirmation.message.operation.update.description`, {
-                  op,
-                  value:     typeof value === 'string' ? value : JSON.stringify(value),
-                  path,
-                  name,
-                  kind,
-                  namespace: namespace?.trim() || null,
-                  cluster
-                }, true) }<br>`;
-              }
-
-              return acc;
-            }, '');
-
-            if (!!description?.trim()) {
-              out += `${ description }<br>`;
+            if (op && value && path) {
+              return `${ acc + t(`ai.confirmation.message.operation.update.description`, {
+                op,
+                value:     typeof value === 'string' ? value : JSON.stringify(value),
+                path,
+                name,
+                kind,
+                namespace: namespace?.trim() || null,
+                cluster
+              }, true) }<br>`;
             }
-            break;
-          }
-        }
-      });
 
-      return `${ out }${ msg }`;
-    }
+            return acc;
+          }, '');
+
+          if (!!description?.trim()) {
+            out += `${ description }<br>`;
+          }
+          break;
+        }
+      }
+    });
+
+    return `${ out }${ msg }`;
   } catch (e) {
     warn('Error generating confirmation description:', e);
   }
