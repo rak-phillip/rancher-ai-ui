@@ -1,12 +1,13 @@
 <script lang="ts" setup>
 import { useStore } from 'vuex';
+import { useKeyboardShortcutsComposable } from '../composables/useKeyboardShortcutsComposable';
 import {
   onMounted, onBeforeUnmount, computed, nextTick, ref,
   watch
 } from 'vue';
 import { PRODUCT_NAME } from '../product';
 import {
-  Agent, AgentState, AIServiceState, ConnectionPhase, HistoryChat, Message, MessagePhase, StorageType
+  Agent, AgentState, AIServiceState, ConnectionPhase, FormattedMessage, HistoryChat, Message, MessagePhase, Role, StorageType
 } from '../types';
 import { useConnectionComposable } from '../composables/useConnectionComposable';
 import { useChatMessageComposable } from '../composables/useChatMessageComposable';
@@ -15,6 +16,7 @@ import { useHeaderComposable } from '../composables/useHeaderComposable';
 import { useAIServiceComposable } from '../composables/useAIServiceComposable';
 import { useChatApiComposable } from '../composables/useChatApiComposable';
 import { useAgentComposable } from '../composables/useAgentComposable';
+import { extractMessageText } from '../utils/label';
 import Header from '../components/panels/Header.vue';
 import Messages from '../components/panels/Messages.vue';
 import Processing from '../components/Processing.vue';
@@ -22,6 +24,10 @@ import Context from '../components/panels/Context.vue';
 import Console from '../components/panels/Console.vue';
 import History from '../components/panels/History.vue';
 import Chat from '../handlers/chat';
+import DeleteChat from '../dialog/DeleteChatCard.vue';
+import KeyboardShortcuts from '../components/header/KeyboardShortcuts.vue';
+import AppModal from '@shell/components/AppModal.vue';
+import { useInputComposable } from '../composables/useInputComposable';
 
 /**
  * Chat panel landing page.
@@ -100,6 +106,7 @@ const {
 
 const showHistory = ref(false);
 const chatHistory = ref<HistoryChat[]>([]);
+const deletingChat = ref<HistoryChat | null>(null);
 
 const chatAgents = computed<Agent[]>(() => {
   return agents.value.map((agent) => {
@@ -149,13 +156,17 @@ async function updateChat(args:{ id: string, payload: Partial<HistoryChat> }) {
   chatHistory.value = await fetchChats();
 }
 
-async function deleteChat(id: string) {
-  await deleteHistoryChat(id);
+async function deleteChat() {
+  if (deletingChat.value) {
+    const id = deletingChat.value!.id;
 
-  if (id === chatMetadata.value.chatId) {
-    ensureReconnectionAndLoadChat(null);
-  } else {
-    chatHistory.value = await fetchChats();
+    await deleteHistoryChat(id);
+
+    if (id === chatMetadata.value.chatId) {
+      ensureReconnectionAndLoadChat(null);
+    } else {
+      chatHistory.value = await fetchChats();
+    }
   }
 }
 
@@ -292,6 +303,62 @@ watch(() => [
   deep:      true,
 });
 
+function openDeleteChatModal(chat: HistoryChat) {
+  deletingChat.value = chat;
+}
+
+async function deleteCurrentChat() {
+  if (!chatMetadata.value.chatId) {
+    return;
+  }
+
+  let currentChat = chatHistory.value.find((c) => c.id === chatMetadata.value.chatId);
+
+  if (!currentChat) {
+    // Fetch the data to make sure the current chat is on the chat history
+    chatHistory.value = await fetchChats();
+    currentChat = chatHistory.value.find((c) => c.id === chatMetadata.value.chatId);
+  }
+
+  if (currentChat) {
+    openDeleteChatModal(currentChat);
+  }
+}
+
+function copyLastAssistantMessage() {
+  const lastAssistantMessage = ([...messages.value] as FormattedMessage[])
+    .reverse()
+    .find((m: FormattedMessage) => m.role === Role.Assistant);
+
+  if (!lastAssistantMessage) {
+    return;
+  }
+
+  let text = extractMessageText(lastAssistantMessage);
+
+  if (text) {
+    if (lastAssistantMessage.summaryContent) {
+      text = cleanInputAndTags(text);
+    }
+
+    navigator.clipboard.writeText(text);
+  }
+}
+
+const { cleanInputAndTags } = useInputComposable();
+
+const {
+  handleKeydown,
+  openShortcuts,
+  keyboardShortcutsRef,
+} = useKeyboardShortcutsComposable({
+  disabled:          () => disabled.value,
+  onNewChat:         () => ensureReconnectionAndLoadChat(null),
+  onCopyLastMessage: copyLastAssistantMessage,
+  onToggleHistory:   toggleHistoryPanel,
+  onDeleteChat:      deleteCurrentChat,
+});
+
 onMounted(() => {
   // Ensure disconnection on browser refresh/close
   window.addEventListener('beforeunload', unmount);
@@ -315,6 +382,8 @@ function unmount() {
   <div
     class="chat-container"
     data-testid="rancher-ai-ui-chat-container"
+    tabindex="0"
+    @keydown="handleKeydown"
   >
     <div
       class="resize-bar"
@@ -331,6 +400,7 @@ function unmount() {
         @close:chat="closePanel"
         @config:chat="routeToSettings"
         @download:chat="downloadMessages"
+        @shortcuts:chat="openShortcuts"
         @toggle:history="toggleHistoryPanel"
       />
       <Messages
@@ -363,10 +433,12 @@ function unmount() {
         :agents="chatAgents"
         :agent-name="agentName"
         :disabled="disabled"
+        :messages="messages"
         :has-permissions="hasPermissions"
         @input:content="ensureConnectionAndSendMessage($event)"
         @select:agent="selectAgent"
       />
+      <KeyboardShortcuts ref="keyboardShortcutsRef" />
       <History
         :chats="chatHistory"
         :active-chat-id="chatMetadata.chatId"
@@ -375,10 +447,21 @@ function unmount() {
         @create:chat="ensureReconnectionAndLoadChat(null)"
         @open:chat="ensureReconnectionAndLoadChat"
         @update:chat="updateChat"
-        @delete:chat="deleteChat"
+        @confirm:delete:chat="openDeleteChatModal"
       />
     </div>
   </div>
+  <app-modal
+    v-if="!!deletingChat"
+    :width="400"
+    height="auto"
+  >
+    <DeleteChat
+      :name="deletingChat.name"
+      @confirm="deleteChat"
+      @close="deletingChat = null"
+    />
+  </app-modal>
 </template>
 
 <style lang='scss' scoped>
@@ -388,6 +471,7 @@ function unmount() {
   height: calc(100vh - 55px);
   position: relative;
   z-index: 20;
+  outline: none;
 
   :deep(.disabled-panel) {
     opacity: 0.5;

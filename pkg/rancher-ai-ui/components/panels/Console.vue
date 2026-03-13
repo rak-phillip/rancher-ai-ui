@@ -7,12 +7,17 @@ import {
 import { useStore } from 'vuex';
 import { useI18n } from '@shell/composables/useI18n';
 import type { PropType } from 'vue';
-import { Agent, LLMConfig } from '../../types';
+import {
+  Agent, FormattedMessage, LLMConfig, Message, Role
+} from '../../types';
 import RcButton from '@components/RcButton/RcButton.vue';
 import SelectAgent from '../agent/SelectAgent.vue';
 import LlmModelLabel from '../console/LlmModelLabel.vue';
 import VerifyResultsDisclaimer from '../console/VerifyResultsDisclaimer.vue';
 import { useInputComposable } from '../../composables/useInputComposable';
+import { isMac } from '@shell/utils/platform';
+import { extractMessageText } from '../../utils/label';
+import Chat from '../../handlers/chat';
 
 /**
  * Console panel for AI chat messages input and AI service's configuration.
@@ -42,6 +47,10 @@ const props = defineProps({
     type:    Boolean,
     default: false,
   },
+  messages: {
+    type:    Array as PropType<Message[]>,
+    default: () => [],
+  },
   hasPermissions: {
     type:    Boolean,
     default: true,
@@ -53,11 +62,15 @@ const emit = defineEmits([
   'select:agent'
 ]);
 
-const { inputText, updateInput, cleanInput } = useInputComposable();
+const {
+  inputText, updateInput, cleanInput, cleanInputAndTags
+} = useInputComposable();
 
 const promptTextarea = ref<HTMLTextAreaElement | null>(null);
 const isFocused = ref(false);
+const completeText = ref('');
 const MAX_HEIGHT = 200;
+const historyIndex = ref(-1);
 
 const text = computed(() => {
   if (props.disabled) {
@@ -68,14 +81,90 @@ const text = computed(() => {
 });
 
 function onInputMessage(event: Event) {
+  clearCompleteTextHistory();
   updateInput((event?.target as HTMLTextAreaElement)?.value);
   nextTick(autoResizePrompt);
 }
 
 function handleTextareaKeydown(event: KeyboardEvent) {
+  if (event.key === 'Tab' && completeText.value) {
+    event.preventDefault();
+    updateInput(completeText.value);
+    clearCompleteTextHistory();
+    nextTick(autoResizePrompt);
+  }
+
+  // When there is completeText it will stop and not send Content
+  if (event.key === 'Enter' && !event.shiftKey && completeText.value) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    return;
+  }
+
   if (event.key === 'Enter' && !event.shiftKey) {
     sendContent(event);
+
+    return;
   }
+
+  // Fix a bug that makes the close chat not work on inputs
+  // Same as the one done with IPlugin
+  if ((event.key?.toLowerCase() === 'k' && event.metaKey && event.shiftKey && isMac) || (event.key.toLowerCase() === 'k' && event.altKey && !isMac)) {
+    event.preventDefault();
+    event.stopPropagation();
+    Chat.close(store);
+
+    return;
+  }
+
+  // ArrowUp and Down will copy the previous/next user message
+  if ((event.key === 'ArrowUp' || event.key === 'ArrowDown') && inputText.value === '') {
+    event.preventDefault();
+    copyUserPreviousMessage(event.key === 'ArrowUp' ? 'prev' : 'next');
+
+    return;
+  }
+}
+
+function copyUserPreviousMessage(direction: 'prev' | 'next') {
+  const userMessages = ([...props.messages] as FormattedMessage[])
+    .filter((m: FormattedMessage) => m.role === Role.User);
+
+  if (!userMessages.length) {
+    return;
+  }
+
+  // History Index is updated to keep the position of the shown message
+  if (direction === 'prev') {
+    historyIndex.value = historyIndex.value < userMessages.length - 1 ? historyIndex.value + 1 : historyIndex.value;
+  } else {
+    historyIndex.value = historyIndex.value > 0 ? historyIndex.value - 1 : -1;
+  }
+
+  // After reset it turn to be empty
+  if (historyIndex.value === -1) {
+    completeText.value = '';
+
+    return;
+  }
+
+  const message = userMessages[userMessages.length - 1 - historyIndex.value];
+  let text = extractMessageText(message);
+
+  if (text) {
+    text = cleanInputAndTags(text);
+
+    completeText.value = text;
+  }
+}
+
+/**
+ * Helper to Clear the CompleteText and reset the HistoryIndex, used when sending a message or changing the chat to avoid showing wrong completeText
+ */
+function clearCompleteTextHistory() {
+  completeText.value = '';
+  historyIndex.value = -1;
 }
 
 function sendContent(event: Event) {
@@ -88,6 +177,7 @@ function sendContent(event: Event) {
     emit('input:content', content);
   }
 
+  clearCompleteTextHistory();
   updateInput('');
   nextTick(autoResizePrompt);
 }
@@ -122,6 +212,11 @@ watch(() => text.value, () => {
 watch(
   () => [props.disabled, props.activeChatId],
   ([newDisabled, newChatId], [oldDisabled, oldChatId]) => {
+    // When changing chat, it needs to clear the completeText and reset the historyIndex to avoid showing wrong completeText
+    if (oldChatId !== newChatId) {
+      clearCompleteTextHistory();
+    }
+
     if (!newDisabled && (oldDisabled || oldChatId !== newChatId)) {
       nextTick(() => {
         promptTextarea.value?.focus();
@@ -149,12 +244,23 @@ onMounted(() => {
         'disabled-panel': props.disabled
       }"
     >
+      <div
+        v-if="completeText"
+        class="chat-input-complete"
+      >
+        <div class="text">
+          {{ completeText }}
+        </div>
+        <div class="tab-label-box">
+          <span class="tab-label">Tab</span>
+        </div>
+      </div>
       <textarea
         ref="promptTextarea"
         class="chat-input"
         rows="1"
         :value="text"
-        :placeholder="props.disabled ? '' : t('ai.prompt.placeholder')"
+        :placeholder="props.disabled || completeText ? '' : t('ai.prompt.placeholder')"
         :disabled="props.disabled"
         autocomplete="off"
         data-testid="rancher-ai-ui-chat-input-textarea"
@@ -217,6 +323,7 @@ onMounted(() => {
   /* The wrapper follows the height of its child */
   height: auto;
   min-height: min-content;
+  position: relative;
 
   &.focused {
     border: solid 1px var(--active-nav);
@@ -224,6 +331,40 @@ onMounted(() => {
 
   &.disabled {
     background-color: var(--disabled-bg);
+  }
+}
+
+.chat-input-complete {
+  padding: 12px 0px 0px 16px;
+  position: absolute;
+  right: 16px;
+  left: 0;
+  line-height: 1.4;
+  // Harcoded colors used for both themes
+  color: #94A3B8;
+  display: flex;
+  gap: 6px;
+  .text {
+    white-space: nowrap;
+    overflow: hidden;
+  }
+  .tab-label-box {
+    font-family: 'Lato';
+    display: flex;
+    padding: 3px 6px;
+    align-items: center;
+    border-radius: 4px;
+    // Harcoded colors used for both themes
+    border: 1px solid #BFC1D3;
+    color: #BFC1D3;
+    font-size: 10px;
+    font-style: normal;
+    font-weight: 400;
+    line-height: normal;
+
+    .tab-label {
+      width: 16px;
+    }
   }
 }
 

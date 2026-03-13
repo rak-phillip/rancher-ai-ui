@@ -191,6 +191,17 @@ ai:
         label: 'This AI agent is currently unavailable.<br>{message}'
         tooltip: This AI agent is currently unavailable.
 
+  shortcuts:
+    button:
+      label: Shortcuts.
+    title: Keyboard Shortcuts
+    items:
+      openChat: Open / Close Chat Panel
+      newChat: New Chat
+      copyLastMessage: Copy Last Response
+      toggleHistory: View Previous Chats
+      deleteChat: Delete Current Chat
+      navigateHistory: Previous / Next Prompt
   menu:
     options:
       chat:
@@ -206,6 +217,9 @@ ai:
         config:
           label: Edit Configuration
           description: Configure the AI model and provider for your assistant
+        shortcuts:
+          label: View Keyboard Shortcuts
+          description: View Keyboard Shortcuts for your assistant
   history:
     chat:
       create: Start a New Chat

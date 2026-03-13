@@ -5,6 +5,7 @@ import {
 import { useStore } from 'vuex';
 import { useI18n } from '@shell/composables/useI18n';
 import { FormattedMessage, MessageInternalSource, MessagePhase, Role as RoleEnum } from '../../types';
+import { extractMessageText } from '../../utils/label';
 import Processing from '../Processing.vue';
 import Actions from './action/index.vue';
 import SourceLinks from './SourceLinks.vue';
@@ -15,6 +16,7 @@ import UserAvatar from './avatar/UserAvatar.vue';
 import SystemAvatar from './avatar/SystemAvatar.vue';
 import BubbleButton from './BubbleButton.vue';
 import RcButton from '@components/RcButton/RcButton.vue';
+import { useInputComposable } from '../../composables/useInputComposable';
 
 const store = useStore();
 const { t } = useI18n(store);
@@ -42,30 +44,18 @@ const isThinking = computed(() => props.message.role === RoleEnum.Assistant &&
 );
 const showCopySuccess = ref(false);
 const timeoutCopy = ref<any>(null);
+const { cleanInputAndTags } = useInputComposable();
 
 function handleCopy() {
-  if (!props.message.summaryContent && !props.message.messageContent && !props.message.thinkingContent && !props.message.formattedMessageContent) {
+  let text = extractMessageText(props.message);
+
+  if (!text) {
     return;
   }
 
-  let text = '';
+  text = cleanInputAndTags(text);
 
-  if (RoleEnum.Assistant && props.message.showThinking) {
-    text += props.message.thinkingContent ? `${ props.message.thinkingContent }\n` : '';
-  }
-
-  if (props.message.summaryContent) {
-    text += props.message.summaryContent;
-
-    if (props.message.showCompleteMessage) {
-      text += `\n${ props.message.messageContent || '' }`;
-    }
-  } else {
-    // formattedMessageContent will contain error messages if any
-    text += (props.message.messageContent || props.message.formattedMessageContent || '');
-  }
-
-  navigator.clipboard.writeText(text.trim());
+  navigator.clipboard.writeText(text);
   showCopySuccess.value = true;
   if (timeoutCopy.value) {
     clearTimeout(timeoutCopy.value);
