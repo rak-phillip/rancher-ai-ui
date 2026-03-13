@@ -4,18 +4,18 @@ import {
   onMounted,
   watch
 } from 'vue';
+import type { PropType } from 'vue';
 import { useStore } from 'vuex';
 import { useI18n } from '@shell/composables/useI18n';
-import type { PropType } from 'vue';
+import { isMac } from '@shell/utils/platform';
+import RcButton from '@components/RcButton/RcButton.vue';
 import {
   Agent, FormattedMessage, LLMConfig, Message, Role
 } from '../../types';
-import RcButton from '@components/RcButton/RcButton.vue';
 import SelectAgent from '../agent/SelectAgent.vue';
 import LlmModelLabel from '../console/LlmModelLabel.vue';
 import VerifyResultsDisclaimer from '../console/VerifyResultsDisclaimer.vue';
 import { useInputComposable } from '../../composables/useInputComposable';
-import { isMac } from '@shell/utils/platform';
 import { extractMessageText } from '../../utils/label';
 import Chat from '../../handlers/chat';
 

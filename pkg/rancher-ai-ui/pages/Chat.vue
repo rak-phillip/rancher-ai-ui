@@ -104,6 +104,20 @@ const {
   restore: restorePanel,
 } = useHeaderComposable();
 
+const { cleanInputAndTags } = useInputComposable();
+
+const {
+  handleKeydown,
+  openShortcuts,
+  keyboardShortcutsRef,
+} = useKeyboardShortcutsComposable({
+  disabled:          () => disabled.value,
+  onNewChat:         () => ensureReconnectionAndLoadChat(null),
+  onCopyLastMessage: copyLastAssistantMessage,
+  onToggleHistory:   toggleHistoryPanel,
+  onDeleteChat:      deleteCurrentChat,
+});
+
 const showHistory = ref(false);
 const chatHistory = ref<HistoryChat[]>([]);
 const deletingChat = ref<HistoryChat | null>(null);
@@ -170,6 +184,55 @@ async function deleteChat() {
   }
 }
 
+function openDeleteChatModal(chat: HistoryChat) {
+  deletingChat.value = chat;
+}
+
+async function deleteCurrentChat() {
+  if (!chatMetadata.value.chatId) {
+    return;
+  }
+
+  let currentChat = chatHistory.value.find((c) => c.id === chatMetadata.value.chatId);
+
+  if (!currentChat) {
+    // Fetch the data to make sure the current chat is on the chat history
+    chatHistory.value = await fetchChats();
+    currentChat = chatHistory.value.find((c) => c.id === chatMetadata.value.chatId);
+  }
+
+  if (currentChat) {
+    openDeleteChatModal(currentChat);
+  }
+}
+
+function copyLastAssistantMessage() {
+  const lastAssistantMessage = ([...messages.value] as FormattedMessage[])
+    .reverse()
+    .find((m: FormattedMessage) => m.role === Role.Assistant);
+
+  if (!lastAssistantMessage) {
+    return;
+  }
+
+  let text = extractMessageText(lastAssistantMessage);
+
+  if (text) {
+    if (lastAssistantMessage.summaryContent) {
+      text = cleanInputAndTags(text);
+    }
+
+    navigator.clipboard.writeText(text);
+  }
+}
+
+function routeToSettings() {
+  store.state.$router.push({
+    name:   `c-cluster-settings-${ PRODUCT_NAME }`,
+    params: { cluster: store.state.$route.params.cluster || 'local' },
+  });
+}
+
 async function ensureReconnectionAndLoadChat(chatId: string | null) {
   showHistory.value = false;
 
@@ -220,13 +283,6 @@ function ensureConnectionAndSendMessage(data: string | Message) {
   } else {
     sendMessage(data, ws.value);
   }
-}
-
-function routeToSettings() {
-  store.state.$router.push({
-    name:   `c-cluster-settings-${ PRODUCT_NAME }`,
-    params: { cluster: store.state.$route.params.cluster || 'local' },
-  });
 }
 
 watch(() => aiAgentDeploymentState.value, (newState, oldState) => {
@@ -301,62 +357,6 @@ watch(() => [
 }, {
   immediate: true,
   deep:      true,
-});
-
-function openDeleteChatModal(chat: HistoryChat) {
-  deletingChat.value = chat;
-}
-
-async function deleteCurrentChat() {
-  if (!chatMetadata.value.chatId) {
-    return;
-  }
-
-  let currentChat = chatHistory.value.find((c) => c.id === chatMetadata.value.chatId);
-
-  if (!currentChat) {
-    // Fetch the data to make sure the current chat is on the chat history
-    chatHistory.value = await fetchChats();
-    currentChat = chatHistory.value.find((c) => c.id === chatMetadata.value.chatId);
-  }
-
-  if (currentChat) {
-    openDeleteChatModal(currentChat);
-  }
-}
-
-function copyLastAssistantMessage() {
-  const lastAssistantMessage = ([...messages.value] as FormattedMessage[])
-    .reverse()
-    .find((m: FormattedMessage) => m.role === Role.Assistant);
-
-  if (!lastAssistantMessage) {
-    return;
-  }
-
-  let text = extractMessageText(lastAssistantMessage);
-
-  if (text) {
-    if (lastAssistantMessage.summaryContent) {
-      text = cleanInputAndTags(text);
-    }
-
-    navigator.clipboard.writeText(text);
-  }
-}
-
-const { cleanInputAndTags } = useInputComposable();
-
-const {
-  handleKeydown,
-  openShortcuts,
-  keyboardShortcutsRef,
-} = useKeyboardShortcutsComposable({
-  disabled:          () => disabled.value,
-  onNewChat:         () => ensureReconnectionAndLoadChat(null),
-  onCopyLastMessage: copyLastAssistantMessage,
-  onToggleHistory:   toggleHistoryPanel,
-  onDeleteChat:      deleteCurrentChat,
 });
 
 onMounted(() => {
@@ -438,7 +438,6 @@ function unmount() {
         @input:content="ensureConnectionAndSendMessage($event)"
         @select:agent="selectAgent"
       />
-      <KeyboardShortcuts ref="keyboardShortcutsRef" />
       <History
         :chats="chatHistory"
         :active-chat-id="chatMetadata.chatId"
@@ -448,6 +447,9 @@ function unmount() {
         @open:chat="ensureReconnectionAndLoadChat"
         @update:chat="updateChat"
         @confirm:delete:chat="openDeleteChatModal"
+      />
+      <KeyboardShortcuts
+        ref="keyboardShortcutsRef"
       />
     </div>
   </div>
