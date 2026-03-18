@@ -3,6 +3,7 @@ import dayjs from 'dayjs';
 import {
   ref,
   onMounted,
+  watch,
 } from 'vue';
 import { useStore } from 'vuex';
 import {
@@ -152,6 +153,23 @@ async function fetchAiAgentConfigCRDs() {
   }
 
   aiAgentConfigCRDs.value = crds;
+}
+
+/**
+ * Merges the updated CRDs status to preserve reactivity and avoid losing status updates.
+ */
+function mergeAiAgentConfigCRDsStatusUpdate(updatedCrds: AIAgentConfigCRD[]) {
+  if (!updatedCrds || !aiAgentConfigCRDs.value) {
+    return;
+  }
+
+  updatedCrds.forEach((storeCrd) => {
+    const crd = aiAgentConfigCRDs.value?.find((c) => c.metadata.name === storeCrd.metadata.name);
+
+    if (crd) {
+      crd.status = storeCrd.status;
+    }
+  });
 }
 
 /**
@@ -315,9 +333,6 @@ const save = async(btnCB: (arg: boolean) => void) => { // eslint-disable-line no
 
         // Save AI Agent Config CRDs
         await saveAiAgentConfigCRDs();
-
-        // Re-watch configs to get any changes made in the backend (status updates)
-        fetchAiAgentConfigCRDs();
       }
 
       // Redeploy the rancher-ai-agent deployment after save
@@ -391,6 +406,13 @@ onMounted(async() => {
     await fetchAiAgentSettings();
 
     await fetchAiAgentConfigCRDs();
+
+    // Watch for status updates of AI Agent Config CRDs
+    watch(
+      () => store.getters['management/all'](RANCHER_AI_SCHEMA.AI_AGENT_CONFIG),
+      mergeAiAgentConfigCRDsStatusUpdate,
+      { deep: true }
+    );
   }
 
   isLoading.value = false;

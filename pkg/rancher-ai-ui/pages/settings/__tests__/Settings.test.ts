@@ -70,6 +70,7 @@ const mockStore = {
   dispatch: jest.fn(),
   commit:   jest.fn(),
   getters:  {
+    'management/all':        jest.fn(() => []),
     'management/canList':    jest.fn(() => true),
     'management/schemaFor':  jest.fn(() => ({ resourceMethods: ['PUT', 'POST', 'DELETE'] })),
     'i18n/t':                (key: string) => key
@@ -789,6 +790,7 @@ describe('Settings.vue', () => {
         }),
         commit:    jest.fn(),
         getters:   {
+          'management/all':        jest.fn(() => []),
           'management/canList':    jest.fn(() => true),
           'management/schemaFor':  jest.fn(() => ({ resourceMethods: ['get'] })),
           'i18n/t':                (key: string) => key
@@ -841,6 +843,7 @@ describe('Settings.vue', () => {
         }),
         commit:    jest.fn(),
         getters:   {
+          'management/all':        jest.fn(() => []),
           'management/canList':    jest.fn(() => false),
           'management/schemaFor':  jest.fn(() => ({ resourceMethods: ['put', 'post', 'delete'] })),
           'i18n/t':                (key: string) => key
@@ -924,6 +927,7 @@ describe('Settings.vue', () => {
         }),
         commit:    jest.fn(),
         getters:   {
+          'management/all':        jest.fn(() => []),
           'management/canList':    jest.fn(() => true),
           'management/schemaFor':  jest.fn(() => ({ resourceMethods: ['GET'] })),
           'i18n/t':                (key: string) => key
@@ -976,6 +980,7 @@ describe('Settings.vue', () => {
         }),
         commit:    jest.fn(),
         getters:   {
+          'management/all':        jest.fn(() => []),
           'management/canList':    jest.fn(() => true),
           'management/schemaFor':  jest.fn((type) => {
             if (type === SECRET) {
@@ -1220,6 +1225,7 @@ describe('Settings.vue', () => {
         }),
         commit:    jest.fn(),
         getters:   {
+          'management/all':        jest.fn(() => []),
           'management/canList':    jest.fn((type) => {
             // Can list secrets and configmaps but not deployments or CRDs
             return type === SECRET || type === CONFIG_MAP;
