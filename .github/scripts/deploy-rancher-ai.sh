@@ -37,7 +37,11 @@ rm -rf rancher-ai-llm-mock
 echo ""
 echo "Cloning rancher-ai-agent chart repository..."
 
-git clone https://github.com/rancher/rancher-ai-agent.git
+# TODO unpin backend chart
+git clone https://github.com/torchiaf/rancher-ai-agent.git
+cd rancher-ai-agent
+git checkout ui-e2e
+cd ..
 
 echo ""
 echo "Cloning llm-mock chart repository..."
